@@ -275,16 +275,16 @@ So the model has two layers:
 
 An analogy: someone walks randomly through a pitch-dark building (hidden layer). You cannot see them; you can only hear a little sound through each room's microphone (observation layer). The sounds are related to the rooms but do not map one-to-one, and you must infer the route from them.
 
-```mermaid
-flowchart LR
-    pi((π)) --> z1
-    z1(("z₁")) -- A --> z2(("z₂")) -- A --> z3(("z₃")) -.-> more((…))
-    z1 -- b --> x1["x₁ (e.g. Login)"]
-    z2 -- b --> x2["x₂ (e.g. No login)"]
-    z3 -- b --> x3["x₃ (e.g. No login)"]
+```
+hidden states    π ──▶ z₁ ───A───▶ z₂ ───A───▶ z₃ ───A───▶ …
+                       │           │           │
+                       b           b           b
+                       ▼           ▼           ▼
+observations          x₁          x₂          x₃
+                    (Login)    (No login)  (No login)
 ```
 
-The circles are hidden states and the boxes are observations. Horizontal arrows are the transition matrix A; vertical arrows are the emission distribution b. There are no arrows between observations: any correlation between them has to flow through the state chain above.
+The top row is the hidden state chain and the bottom row is what we observe. Horizontal arrows are the transition matrix A; vertical arrows are the emission distribution b. There are no arrows between observations: any correlation between them has to flow through the state chain above.
 
 ### 3.2 Model parameters
 

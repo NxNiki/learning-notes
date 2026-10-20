@@ -45,6 +45,6 @@ python math-models/hidden-markov-models/hmm.py   # HMM demo
 ## Conventions
 
 - One folder per topic, starting from [`_templates/topic-template.md`](_templates/topic-template.md).
-- Math is written in GitHub-flavored Markdown: display formulas in ` ```math ` blocks, diagrams in ` ```mermaid ` blocks.
+- Math is written in GitHub-flavored Markdown: display formulas in ` ```math ` blocks; diagrams in ` ```mermaid ` blocks, or fixed-width text when the layout needs a grid mermaid cannot produce.
 - Every worked example in the notes has a matching test, so the notes and the code cannot drift apart.
 - Course slides, textbooks and paper PDFs are not committed. The original per-course repos keep them.
