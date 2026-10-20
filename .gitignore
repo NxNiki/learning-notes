@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+.ipynb_checkpoints/
+.DS_Store
+node_modules/
+.idea/
+.metadata/
+cmake-build-debug/
+a.out
+*.tar.gz
+*.tsv
