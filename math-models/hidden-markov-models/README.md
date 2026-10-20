@@ -136,7 +136,7 @@ Conditional independence is not the same as independence. For example, "high bet
 **Side note: correlation versus independence.** Independence is a requirement on the whole distribution: P(X, Y) = P(X) P(Y) for every value, so knowing X does not change anything about the distribution of Y. The correlation coefficient only measures the strength of a *linear* relationship:
 
 ```math
-\rho = \frac{\operatorname{Cov}(X, Y)}{\sigma_X\, \sigma_Y}, \qquad \operatorname{Cov}(X, Y) = E[XY] - E[X]\,E[Y]
+\rho = \frac{\mathrm{Cov}(X, Y)}{\sigma_X\, \sigma_Y}, \qquad \mathrm{Cov}(X, Y) = E[XY] - E[X]\,E[Y]
 ```
 
 The relationship runs one way:
