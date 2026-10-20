@@ -1,0 +1,12 @@
+name: udacity_course
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pandas
+  - pip
+  - ipykernel
+  - pip:
+      - smdebug
