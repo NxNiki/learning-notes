@@ -1,0 +1,50 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Include jQuery if needed -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+  <title>Your Page</title>
+</head>
+<body>
+  <!-- Your HTML content -->
+  <script>
+    var car = function(loc) {
+      var obj = {loc: loc};
+      obj.move = function() {obj.loc++};
+      return obj;
+    };
+
+    // define method outside constructor so that the interpretor will not create new instance of the function every
+    // time it runs.
+    var car = function(loc) {
+      var obj = {loc: loc};
+      obj.move = move;
+      return obj;
+    };
+
+    var move = function() {this.loc++;};
+
+    // define an object containing all the methods and assign it to obj:
+    var car = function(loc) {
+      var obj = {loc: loc};
+      $.extend(obj, car.methods); // jquery is needed
+      return obj;
+    };
+
+    car.methods = {
+      move: function() {this.obj++;}
+    }
+
+    var amy = car(1);
+    amy.move();
+    var ben = car(9);
+    ben.move();
+  </script>
+
+</body>
+</html>
+

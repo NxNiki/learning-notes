@@ -1,0 +1,38 @@
+# remove file from staging area (unstage a file):
+git reset HEAD summary_statistics.csv
+
+# remove all files from staging area:
+git reset HEAD
+
+# undo changes to an unstaged file:
+git checkout -- summary_statistics.csv
+# checkout means switching to a different version, defaults to the version of last commit
+
+# undo changes to all unstaged files:
+git checkout .
+# . refers to the current directory in a shell, this command should be run in the main directory of the repo
+
+# show the 3 most recent commits:
+git log -3
+
+# show commit history of one file:
+git log -3 report.md
+
+git log --since='Apr 2 2022'
+git log --since='Apr 2 2022' --until 'Apr 11 2022'
+
+# restore an old version of a file:
+git checkout dc9d8fac mental_health_survey.csv
+# restore the version of the second last commit:
+git checkout HEAD~1 mental_health_survey.csv
+
+# restore all files in the repo to previous commit:
+git checkout dc9d8fac
+git checkout HEAD~1
+
+# see files not being tracked:
+git clean -n
+# delete untracked files:
+git clean -f # this cannot be undone!
+
+

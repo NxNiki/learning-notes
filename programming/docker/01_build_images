@@ -1,0 +1,7 @@
+docker run -it ubuntu
+
+# -it: interactive. Otherwise, container will stop immediately.
+
+-p port mapping
+-v volume mapping
+

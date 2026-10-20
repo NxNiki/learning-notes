@@ -1,0 +1,40 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Include jQuery if needed -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+  <title>Your Page</title>
+</head>
+<body>
+  <!-- Your HTML content -->
+  <script>
+
+    // define an object containing all the methods and assign it to obj:
+    var car = function(loc) {
+      // delegation is only created when using Object.create()
+      // adding new will temporaliy add this:
+      // this = Object.create(car.prototype)
+      this.loc = loc;
+      return this;
+    };
+
+    // when a function get created, it will have an object attached to it as a container for methods, in case it will
+    // be used to build an instance of a class:
+    // car.prototype = {};
+    car.prototype.move = function() { this.obj++; };
+
+    var amy = new car(1);
+    console.log(amy.move());
+    var ben = new car(9);
+    ben.move();
+
+    console.log(car.prototype.constructor);
+  </script>
+
+</body>
+</html>
+

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Variables</title>
+</head>
+<body>
+    <div id="output"></div>
+    <script>
+        let name = "Mark";
+        let age = 48;
+        let gpa = 3.89;
+
+        const hometown = "Trumbull";
+
+        let isMarkCool = true;
+        let family = ["Joan", "Rick", "Kerry"]      // Object variable
+
+        str = family.join(', ')
+        console.log(str)
+
+        document.getElementById("output").innerHTML = name + " is " + age + " years old.";
+
+        gpa = 3.2;
+
+        console.log(gpa)
+
+        function organizeItems(itemData) {
+            const organizedItems = {};
+
+            itemData.forEach(item => {
+                if (!organizedItems[item.category]) {
+                organizedItems[item.category] = [];
+                }
+
+                // If the item is on sale, add ($) to the item name
+                const itemName = item.onSale ? `${item.itemName}($)` : item.itemName;
+                
+                organizedItems[item.category].push(itemName);
+            });
+
+            return organizedItems;
+        }
+
+        // Example usage
+        var itemData = [
+            { category: 'fruit', itemName: 'apple', onSale: false },
+            { category: 'canned', itemName: 'beans', onSale: false },
+            { category: 'canned', itemName: 'corn', onSale: true },
+            { category: 'frozen', itemName: 'pizza', onSale: false },
+            { category: 'fruit', itemName: 'melon', onSale: true },
+            { category: 'canned', itemName: 'soup', onSale: false },
+        ];
+
+        var result = organizeItems(itemData);
+
+        console.log(result);
+    </script>
+</body>
+</html>

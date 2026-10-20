@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>JavaScript Events</title>
+  <style>
+    #title {
+      font-size: 1em;
+    }
+  </style>
+</head>
+<body>
+  <div id="main">
+    <p id="title">This is title text.</p>
+    <button id="btnLarger">Larger</button>
+    <button id="btnSmaller">Smaller</button>
+  </div>
+  <script>
+    const btnLarger = document.getElementById("btnLarger");
+    const btnSmaller = document.getElementById("btnSmaller");
+
+    let size = 1;
+    btnLarger.addEventListener("click", () => {
+      size += 0.25;
+      document.getElementById("title").style.fontSize = size + "em";
+    });
+
+    btnSmaller.addEventListener("click", () => {
+      size -= 0.25;
+      document.getElementById("title").style.fontSize = size + "em";
+    });
+
+    document.addEventListener("keydown", (e) => {
+      document.getElementById("title").innerHTML += "key:" + e.key + " code:" + e.code +" ";
+    })
+
+    document.addEventListener("keypress", (e) => {
+      document.getElementById("title").innerHTML += "key:" + e.key + " code:" + e.code +" ";
+    })
+
+  </script>
+</body>
+</html>

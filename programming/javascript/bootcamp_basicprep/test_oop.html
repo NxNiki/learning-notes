@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script>
+        // Skeleton
+        // FUNCTION DEFINITION(S)
+        function PhoneNumberFormatter(numbers) {
+        this.numbers = numbers;
+        }
+
+        PhoneNumberFormatter.prototype.render = function() {
+            var string = '';
+            // your code here
+            string += this.getAreaCode();
+            string = this.parenthesize(string);
+            string += ' ';
+            string += this.getExchangeCode();
+            string += '-';
+            string += this.getLineNumber();
+            return string;
+        };
+
+        PhoneNumberFormatter.prototype.getAreaCode = function() {
+            // your code here
+            return this.slice(0, 3);
+        };
+
+        PhoneNumberFormatter.prototype.getExchangeCode = function() {
+            // your code here
+            return this.slice(3, 6);
+        };
+
+        PhoneNumberFormatter.prototype.getLineNumber = function() {
+            // your code here
+            return this.slice(6, 10);
+        };
+
+        PhoneNumberFormatter.prototype.parenthesize = function(string) {
+            return '(' + string + ')';
+        };
+
+        PhoneNumberFormatter.prototype.slice = function(start, end) {
+            return this.numbers.slice(start, end).join('');
+        };
+
+        // ASSERTION FUNCTION(S) TO BE USED
+        function assertEquall(actual, expected, testName) {
+            if (actual === expected) {
+                console.log('passed');
+            } else {
+                console.log(`FAILED [${testName}] expected: ${expected}, but got: ${actual}`)
+            }
+        }
+
+        // TESTS CASES
+        pn = new PhoneNumberFormatter([2, 6, 7, 3, 6, 6, 3, 4, 3, 8]);
+        assertEquall(pn.render(), '(267) 366-3438', 'test phone number render')
+
+
+    </script>
+    
+</body>
+</html>

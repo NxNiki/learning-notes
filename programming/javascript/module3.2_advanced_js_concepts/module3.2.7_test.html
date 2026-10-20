@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Include jQuery if needed -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+  <title>Your Page</title>
+</head>
+<body>
+  <!-- Your HTML content -->
+  <script>
+
+    // question1:
+    var name = "Window";
+    var alice = {
+      name: "Alice",
+      sayHi: function() {
+        alert(this.name + " says hi");
+      }
+    };
+    var bob = { name: "Bob" };
+
+    // setTimeout(function() {
+    //   alice.sayHi.call(bob);
+    // }, 1000);
+
+    setTimeout(alice.sayHi.call(bob), 1000);
+
+    // question2:
+    function sayHello () {
+      alert(this.name + " says hello!");
+    }
+    var alice = { name: "Alice" };
+    sayHello.call(alice);
+    // sayHello.prototype.call(alice);
+    // Function.prototype.call(sayHello, alice);
+
+    // question3:
+    var x = 10;
+    var puzzle = function (amount) {
+      this.x += amount;
+      return this.x;
+    };
+
+    var result = 50 - puzzle(20);
+    console.log(result);
+
+    // question4:
+    window.name = 'window'
+
+    var alice = {
+      name: 'Alice',
+      greet: function () {
+        return "Hi I am " + this.name
+      }
+    }
+
+    var bob = {
+      name: 'Bob',
+      greet: alice.greet
+    }
+
+    var greet = alice.greet
+    var result = greet()
+    console.log(result);
+
+    // question5:
+    var obj1 = { x: 10 };
+    var obj2 = Object.create(obj1);
+    var obj3 = Object.create(obj2);
+    var result = obj3.x + 10;
+    console.log(result);
+
+    // question6:
+    var name = "Window";
+    var alice = {
+      name: "Alice",
+      sayHi: function() {
+        alert(this.name + " says hi");
+      }
+    };
+    var bob = { name: "Bob" };
+    setTimeout(alice.sayHi.bind(alice), 1000);
+
+  </script>
+
+</body>
+</html>
+

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="ID=edge">
+    <meta name="viewpoint" content="width=device-width, inital-scale=1.0">
+    <title>JSON</title>
+  </head>
+  <body>
+    <script>
+      fetch('nyc-subway.json')
+      .then(response => response.json())
+      .then(data => {
+          // your code to handle the data here
+          for(line in data.lines) {
+            let subwayLine = data.lines[line];
+            console.log("Line : " + subwayLine.name);
+            console.log("Color : " + subwayLine.color);
+            console.log("Stations : " + subwayLine.stations);
+          }
+      })
+      .catch(err => {
+        console.log(err);
+      });
+
+
+      function getStations(lineName) {
+        fetch('nyc-subway.json')
+        .then(response => response.json())
+        .then(data => {
+            for(line in data.lines) {
+                let subwayLine = data.lines[line];
+                if(subwayLine.name === lineName) {
+                    console.log(subwayLine.stations);
+                    return subwayLine.stations;
+                }
+            }
+          })
+          .catch(err => {
+            console.log(err);
+          });
+        }
+      console.log(getStations("1"));
+    </script>
+  </body>
+</html>

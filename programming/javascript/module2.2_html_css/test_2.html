@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+
+<body id = "target">
+  <button id= "beeperOne">Beeper</button>
+  <button class = "beeperTwo">Beeper 2</button>
+  <button class = "beeperThree">Beeper 3</button>
+  <div></div>
+  <p id = "output">HEY</p>
+  <input id = "color"></input>
+  <button id = "go">Click Me</button>
+
+<script src="https://code.jquery.com/jquery-2.1.1.js"></script>
+<script>
+  $('button#go').on('click', function(){
+    $('p#output').text( $('input#color').val() ).css('color', 'red');
+  });
+</script>
+</body>
+</html>

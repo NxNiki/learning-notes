@@ -1,0 +1,103 @@
+# aggregate functions:
+# only apply on non-null values
+select 
+  max(invoice_total) as highest,
+  min(invoice_total) as lowest,
+  avg(invoice_total) as average,
+  sum(invoice_total * 1.1) as total,
+  count(invoice_total) as number_of_invoices,
+  count(payment_date) as count_of_payments,
+  count(*) as total_records
+from invoices
+
+# count only unique values
+select 
+  max(invoice_total) as highest,
+  min(invoice_total) as lowest,
+  avg(invoice_total) as average,
+  sum(invoice_total * 1.1) as total,
+  count(invoice_total) as number_of_invoices,
+  count(payment_date) as count_of_payments,
+  count(distinct client_id) as total_records
+from invoices
+
+
+select
+  'First half of 2019' as date_range,
+  sum(invoice_total) as total_sales,
+  sum(payment_total) as total_payments,
+  sum(invoices_total - payment_total) as what_we_expect
+from invoices
+where invoice_date between '2019-01-01' and '2019-06-30'
+union
+select
+  'Second half of 2019' as date_range,
+  sum(invoice_total) as total_sales,
+  sum(payment_total) as total_payments,
+  sum(invoices_total - payment_total) as what_we_expect
+from invoices
+where invoice_date between '2019-07-01' and '2019-12-31'
+union
+select
+  'total' as date_range,
+  sum(invoice_total) as total_sales,
+  sum(payment_total) as total_payments,
+  sum(invoices_total - payment_total) as what_we_expect
+from invoices
+where invoice_date between '2019-01-01' and '2019-12-31'
+
+# group by clause:
+select
+  sum(invoice_total) as total_sales
+from invoices
+where invoice_date >= "2019-07-01'
+group by client_id # group by is always after from and where and before order by.
+order by total_sales desc
+
+select
+  state,
+  city,
+  sum(invoice_total) as total_sales
+from invoices i
+join clients using (client_id)
+where invoice_date >= "2019-07-01'
+group by state, city 
+order by total_sales desc
+
+# having clause:
+select
+  client_id,
+  sum(invoice_total) as total_sales,
+  count(*) as number_of_invoices
+from invoices
+group by client_id
+having total_sales > 500 # filter data after rows are grouped.
+
+
+# having clause with a compound filter condition
+select
+  client_id,
+  sum(invoice_total) as total_sales,
+  count(*) as number_of_invoices
+from invoices
+group by client_id
+having total_sales > 500 and number_of_invoices > 5 # columns need to be in the select clause.
+
+
+# rollup operator: adds up values for aggregate values.
+
+select
+  client_id,
+  sum(invoice_total) as total_sales
+from invoices i
+join clients c using(client_id)
+group by state, city with rollup
+
+select
+  pm.name as payment_method,
+  sum(amount) as total
+from payments p
+join payment_methods pm
+  on p.payment_method = pm.payment_method_id
+group by pm.name with rollup # when adding with rollup, we cannot use column alias.
+

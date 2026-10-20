@@ -1,0 +1,14 @@
+{
+  "lines": {
+    "1": {
+      "name": "1",
+      "color": "red",
+      "stations": ["Van Cortlandt Park-242 St", "238th St", "231st St", "Marble Hill-225 St"]
+    },
+    "2": {
+      "name": "2",
+      "color": "red",
+      "stations": ["Wakefield-241 St", "Nereid Ave", "219th St", "Gun Hill Rd"]
+    }
+  }
+}

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <script>
+        // FUNCTION DEFINITION(S)
+        function isIsogram(text) {
+            // add each char to a set
+            // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set
+            // note: a set drops dup values
+            // thus, to see if all the chars were unique,
+            // check length of text and the size of the set
+            seen = new Set();
+            for (i = 0; i < text.length; i++) {
+                item = text[i];
+                console.log(item)
+                console.log(seen)
+                console.log(seen.has(item))
+                if (seen.has(item)) {
+                    return false;
+                } else {
+                    seen.add(item);
+                }
+            }
+            return true;
+        }
+
+        // ASSERTION FUNCTION(S) TO BE USED
+        function assertIsIsogram(text, output, testName) {
+            return;
+        }
+
+        // TESTS CASES
+        res = isIsogram('abbc');
+        console.log(res);
+    </script>
+    
+</body>
+</html>

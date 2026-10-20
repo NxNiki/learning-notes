@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Video</title>
+    <style>
+      video {
+        width: 50%;
+        height: 50%;
+      }
+    </style>
+  </head>
+  <body>
+    <video>
+      <source src="Twiddler Xin.mov" />
+    </video>
+    <output id="timeOut">0</output>
+    <button id="btnPlay">Play</button>
+    <button id="btnStop">Stop</button>
+    <button id="btnPause">Pause</button>
+    <script>
+      let myVideo = document.getElementsByTagName("video");
+      myVideo = myVideo[0];
+      console.log(myVideo);
+
+      let myInterval = setInterval(postTime, 1000);
+      function postTime(e) {
+        document.getElementById("timeOut").innerHTML = "Time: " + Math.round(myVideo.currentTime);
+      }
+
+      const btnPlay = document.getElementById("btnPlay");
+      btnPlay.addEventListener("click", (e) => {
+        myVideo.play();
+      })
+
+      const btnStop = document.getElementById("btnStop");
+      btnStop.addEventListener("click", (e) => {
+        myVideo.pause();
+        myVideo.currentTime = 0;
+      })
+
+      const btnPause = document.getElementById("btnPause");
+      btnPause.addEventListener("click", (e) => {
+        myVideo.pause();
+      })
+
+    </script>
+  </body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Include jQuery if needed -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+
+  <title>Your Page</title>
+</head>
+<body>
+  <!-- Your HTML content -->
+  <script>
+
+    // Your custom script using jQuery
+    var gold = { a: 1 };
+    // this acts like copy every property from gold to blue
+    var blue = $.extend({}, gold);
+    blue.b = 2;
+    console.log(blue.a, blue.b, blue.z);
+
+    // link gold to rose, such that when we cannot find a property on rose, it will fall back to gold
+    var rose = Object.create(gold);
+    rose.b = 2
+    console.log(rose.a, rose.b, rose.z);
+
+    // difference between two approaches is when the copy is executed:
+    gold.z = 3;
+    console.log('blue.z:' + blue.z); // as blue is aready copied from gold, this is undefind.
+    console.log('rose.z:' + rose.z);
+
+    // there is a top-level object that every JS object delegates to (object prototype).
+    console.log(rose.toString());
+
+  </script>
+</body>
+</html>
+
+

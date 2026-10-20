@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>jQuery .index() Example</title>
+  <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+  <script>
+    $(document).ready(function () {
+      // link.index() with No Arguments
+      var foo = $("#foo1");
+      console.log("Index: " + foo.index()); // 1
+      var foo = $("#bar1");
+      console.log("Index: " + foo.index()); // 2
+      var foo = $("#baz1");
+      console.log("Index: " + foo.index()); // 3
+
+      var listItem = $("li");
+      // This implicitly calls .first()
+      console.log("Index: " + listItem.index()); // 0
+      console.log("Index: " + listItem.first().index()); // 0
+
+      var div = $("div");
+      // This implicitly calls .first()
+      console.log("Index: " + div.index()); // 0
+      console.log("Index: " + div.first().index()); // 0
+
+      // index() with string argument
+      // var foo = $( "li" );
+      var foo = $( "#foo1" );
+
+      // This implicitly calls .first()
+      console.log( "Index: " + foo.index( "li" ) ); // 0
+      console.log( "Index: " + foo.first().index( "li" ) ); // 0
+
+      var baz = $( "#baz1" );
+      console.log( "Index: " + baz.index( "li" )); // 2
+
+      var listItem = $( "#bar1" );
+      console.log( "Index: " + listItem.index( ".test" ) ); // 1
+
+      var div = $( "#last" );
+      console.log( "Index: " + div.index( "div" ) ); // 2
+    });
+  </script>
+</head>
+<body>
+  <h1>jQuery .index() Example</h1>
+  <p>.index() is a method on jQuery objects that's generally used to search for a given element within the jQuery object that it's called on. This method has four different signatures with different semantics that can be confusing. This article covers details about how to understand the way .index() works with each signature.</p>
+
+  <h2>link.index() with No Arguments</h2>
+  <ul>
+    <div></div> <!--comment this line to make index of foo1 be 0-->
+    <li id="foo1">foo</li>
+    <li id="bar1">bar</li>
+    <li id="baz1">baz</li>
+    <div></div>
+  </ul>
+</body>
+</html>

@@ -1,0 +1,50 @@
+# create a new repo:
+git init mental-health-workspace
+
+# avoid nested repos. this will create two .git directories
+
+# if you already in the directory of a project and want to create a repo based in it:
+git init
+
+# remote repos
+
+git clone path-to-project-directory
+
+git clone /home/john/repo
+git clone /home/john/repo new_repo
+
+# clone a remote:
+git clone https://github.com/datacamp/project
+
+# git remebers where the original repo was and stores a remote tag in the new repo's configuration
+# list the name of remotes of a repo (in the repo directory):
+git remote
+
+git remote -v #verbose
+
+# add more remotes by specifying a name for git to assign:
+git remote add george https://github.com/george_datacamp/repo
+
+# add name to remote repo (stored locally but not in the current directory)
+git remote add john /home/john/repo
+
+# gathering from remote (get content from remote to local repo)
+
+# to compare files in a remote against contents in local repo, we need to fetch versions of remote.
+git fetch origin main
+
+# fetch into a different branch:
+git fetch origin report
+
+# synchronizing content between local's main branch and remote:
+git merge origin main # orgin is the remote, main is local
+
+# fast-forward mean local repo is behind the remote.
+
+# remote is often ahead of local repo, fetch and merge is a common workflow, this is simplified by pulling from remote
+git pull origin main
+
+# it's important to save our work locally before we pull from remote.
+
+# push to remote
+git push origin main

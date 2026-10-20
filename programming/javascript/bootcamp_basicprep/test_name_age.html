@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Name and age</title>
+</head>
+<body>
+    <div id="output"></div>
+    <script>
+        // FUNCTION DEFINITION(S)
+        // USE THIS FUNCTION TO GENERATE A RANDOM NUMBER
+        function getRandomIntInclusive(min, max) {
+        min = Math.ceil(min);
+        max = Math.floor(max);
+        return Math.floor(Math.random() * (max - min + 1)) + min;
+        }
+
+        function decorateClassListWithAges(classList) {
+        // creates an object for each string in the input array, with an age of 10 or 11
+        // returns an array of these objects
+        res = [];
+        classList.forEach(item => {
+            res.push({'name': item, 'age': getRandomIntInclusive(10, 11)})
+        })
+        return res;
+        }
+
+        // ASSERTION FUNCTION(S) TO BE USED
+        function assertWithinRange(val, min, max) {
+            return val >= min && val <= max;
+        }
+
+        function assertAge(classList, classListWithAges, testName) {
+            passed = true;
+            if (classList.length !== classListWithAges.length) {
+                console.log('FAILED [' + testName + '] length not equal')
+                passed = false;
+            } else {
+                for (i=0; i<classList.length; i++) {
+                    if (classList[i] !== classListWithAges[i].name) {
+                        console.log('FAILED [' + testName + '] name mismatch. Expected: ' + classList[i] + ' actual: ' + classListWithAges[i].name)
+                        passed = false;
+                    }
+                    if (!assertWithinRange(classListWithAges[i].age, 10, 11)) {
+                        console.log('FAILED [' + testName + '] age not in range 10 - 11. Actual: ' + classListWithAges[i].age)
+                        passed = false;
+                    }
+                }
+            } 
+            if (passed) {
+                console.log('passed');
+            }
+        } 
+
+        // TESTS CASES
+
+        // Sample Input
+        var classList = ["Joe", "Jack", "John", "Fred", "Frank", "Barry", "Larry", "Mary",
+        "Harry", "Farrell", "Susan", "Monica", "Keira", "Caroline", "Harriet", "Erica",
+        "Luann", "Cheryl", "Beth", "Rupa", "Linda", "Allison", "Nancy", "Dora"];
+
+
+        classListWithAges = decorateClassListWithAges(classList);
+
+        assertAge(classList, classListWithAges, 'check name and age range')
+
+    </script>
+    
+</body>
+</html>

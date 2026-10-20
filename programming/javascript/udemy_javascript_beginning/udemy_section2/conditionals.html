@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conditionals</title>
+</head>
+<body>
+    <div id="output"></div>
+    <script>
+        let age = prompt("how old are you?");
+
+        if(age >= 21){
+            document.getElementById("output").innerHTML = "<p>You are old enough to drink alcohol!</p>";
+        } else {
+            document.getElementById("output").innerHTML = "<p>You not are old enough to drink alcohol!</p>";
+        }
+
+        let cizizen = true;
+        if (age >= 25 && citizen == true){
+            document.getElementById("output").innerHTML += "You are eligible to vote";
+        } else {
+            document.getElementById("output").innerHTML += "You are not eligible to vote";
+        }
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,37 @@
+# list customizable settings:
+git config --list
+
+# change settings:
+git config --global user.email johnsmith@datacamp.com
+git config --global user.name 'John Smith' # use single quotation when there is space in the name, or string after space will be ignored.
+
+# using alias:
+# create an alias for commiting files by executing ci:
+git config --global alias.ci 'commit -m'
+
+git config --global alias.unstage 'reset HEAD'
+
+# aliases are stored in .gitconfig, we can access it by calling:
+git config --global --list
+
+# ignore specific files by setting file named as .gitignore:
+nano .gitignore
+
+# branches:
+
+# see what branches exist for our project:
+git branch
+
+# create a new branch:
+git checkout -b report
+
+# see difference between two branches named main and summary-statistics:
+git diff main summary-statistics
+
+# switch to a another branch:
+git checkout report
+
+# merge summary-statistics into main:
+git merge summary-statistics main
+
+
