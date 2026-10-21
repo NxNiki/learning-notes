@@ -230,7 +230,7 @@ The sum is exactly the definition of matrix multiplication. By induction, n-step
 A^2 = \begin{pmatrix} 0.70 & 0.30 \\ 0.45 & 0.55 \end{pmatrix}
 ```
 
-So a player who is Active today is still Active the day after tomorrow with probability 0.70. This identity is the **Chapman-Kolmogorov equation**. Chapter 8 uses $A^k$ for "$k$ days ahead" predictions.
+So a player who is Active today is still Active the day after tomorrow with probability 0.70. This identity is the **Chapman-Kolmogorov equation**. Chapter 8 uses $A^k$ for predictions $k$ days ahead.
 
 ### 2.6 The stationary distribution
 
