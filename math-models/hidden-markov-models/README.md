@@ -180,7 +180,7 @@ Random walks come in many variants, all relevant later:
 
 ### 2.2 Definition of a Markov chain
 
-Generalizing the random walk: a sequence of random variables $z_1, z_2, \dots$ jumps between a finite set of states $\{1, \dots, N\}$ and satisfies the Markov property:
+Generalizing the random walk: a sequence of random variables $z_1, z_2, \dots$ jumps between a finite set of states $\lbrace 1, \dots, N \rbrace$ and satisfies the Markov property:
 
 ```math
 P(z_t \mid z_{t-1}, z_{t-2}, \dots, z_1) = P(z_t \mid z_{t-1})
@@ -409,7 +409,7 @@ Treat $\alpha_t$ as a row vector, $b(x_t)$ as the vector of emission probabiliti
 Compare with $p_{t+1} = p_t A$ from Section 2.4: **the forward algorithm is the Markov chain's distribution update plus a Bayesian correction from each observation.**
 
 1. Predict: $\alpha_{t-1} A$ pushes yesterday's belief to today using the transition matrix (total probability).
-2. Update: $\odot\, b(x_t)$ multiplies in how likely today's observation is under each state (the numerator of Bayes' theorem).
+2. Update: $\odot b(x_t)$ multiplies in how likely today's observation is under each state (the numerator of Bayes' theorem).
 
 Normalizing $\alpha_t$ gives exactly the Bayesian posterior $P(z_t = j \mid x_{1:t})$. The 0.818 in Section 1.4 is the result at $t = 1$. This predict-update structure is identical to the **Kalman filter** (Chapter 10).
 
@@ -681,7 +681,7 @@ EM has an important property: **the observed-data log-likelihood $\log P(x \mid 
 Using the $\gamma$ and $\xi$ from Chapter 5, do one M-step on our single three-day sequence:
 
 - Initial distribution: $\pi_{\text{new}} = (\gamma_1(\text{Active}), \gamma_1(\text{Cold})) = (0.609, 0.391)$.
-- Emissions: $P(\text{Login} \mid \text{Active}) = \gamma_1(\text{Active}) \div [\gamma_1 + \gamma_2 + \gamma_3](\text{Active}) = 0.609 \div (0.609 + 0.128 + 0.097) \approx 0.730$. Likewise, $P(\text{Login} \mid \text{Cold}) \approx 0.391 \div 2.166 \approx 0.181$.
+- Emissions: $P(\text{Login} \mid \text{Active}) = \gamma_1(\text{Active}) \div \sum_{t=1}^{3} \gamma_t(\text{Active}) = 0.609 \div (0.609 + 0.128 + 0.097) \approx 0.730$. Likewise, $P(\text{Login} \mid \text{Cold}) \approx 0.391 \div 2.166 \approx 0.181$.
 - Transitions: $\xi_1(\text{Active}, \text{Cold}) \approx 0.490$ and $\xi_2(\text{Active}, \text{Cold}) = 0.0468 \times 0.2 \times 0.7 \times 1 \div 0.080184 \approx 0.082$. So $A_{\text{new}}(\text{Active} \to \text{Cold}) = (0.490 + 0.082) \div (0.609 + 0.128) \approx 0.776$.
 
 $A(\text{Active} \to \text{Cold})$ was only 0.2, and after one update it jumps to 0.776. Because this one sequence happens to be "one login, then no logins", the model concludes that Active players turn Cold very quickly. **With a single three-day sequence, the parameters get badly skewed**; this is **overfitting** on a tiny sample. Real training uses thousands of sequences or more.
