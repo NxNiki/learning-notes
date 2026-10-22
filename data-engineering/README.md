@@ -7,3 +7,5 @@
 | [aws-ml](aws-ml/) | `AWSMachineLearning/` Udemy AWS ML course notes and labs; `udacity_mle/` Udacity ML Engineer nanodegree projects on SageMaker | Udemy, Udacity |
 
 Data files and SageMaker model artifacts are not committed.
+
+Reading: Kleppmann, *Designing Data-Intensive Applications* — text in the private [books](https://github.com/NxNiki/books/tree/main/ddia) repo; chapter notes will go in `designing-data-intensive-applications/` here.

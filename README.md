@@ -33,6 +33,14 @@ Personal study notes on math models, programming, data/ML engineering, algorithm
 | Algorithms | [LeetCode](algorithms/leetcode/) | own solutions | Ongoing |
 | Papers | [Journal club](papers/) | own notes | Ongoing |
 
+## Books
+
+Book PDFs and their extracted text live in the private [books](https://github.com/NxNiki/books) repo (copyrighted material stays out of this public one). Notes written from them belong here, as topics.
+
+| Book | Text | Notes |
+| --- | --- | --- |
+| Martin Kleppmann, *Designing Data-Intensive Applications* (O'Reilly, 2017) | [books/ddia](https://github.com/NxNiki/books/tree/main/ddia) | not started |
+
 ## Getting started
 
 ```bash
