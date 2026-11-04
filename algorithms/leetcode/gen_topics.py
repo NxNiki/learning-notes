@@ -1,0 +1,137 @@
+"""Generate topics.md, the index of LeetCode problems by topic.
+
+To add a problem: save it as "N. Title.ipynb" (or .py) in this folder, add an
+entry for N to P below, then run `python3 gen_topics.py`. The script stops if a
+solution file has no entry in P, or an entry has no file.
+"""
+import os
+import re
+from urllib.parse import quote
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+
+TOPICS = [
+    "Array", "String", "Hash Table", "Two Pointers", "Sliding Window", "Prefix Sum",
+    "Stack", "Monotonic Queue", "Heap / Quickselect", "Sorting", "Binary Search",
+    "Greedy", "Dynamic Programming", "Backtracking", "Recursion", "Linked List",
+    "Tree", "Trie", "Graph", "BFS", "DFS", "Shortest Path", "Matrix", "Math",
+    "Bit Manipulation", "Design",
+]
+
+# number -> (topics, note); the notebook is found by its "N. " prefix.
+P = {
+    1:    (["Array", "Hash Table"], ""),
+    5:    (["String", "Two Pointers", "Dynamic Programming"], "expand around center"),
+    15:   (["Array", "Two Pointers", "Sorting"], ""),
+    36:   (["Hash Table", "Matrix"], ""),
+    37:   (["Backtracking", "Hash Table", "Matrix"], ""),
+    39:   (["Backtracking", "Array"], ""),
+    42:   (["Array", "Two Pointers"], ""),
+    45:   (["Greedy", "Array"], ""),
+    47:   (["Backtracking", "Sorting"], "skip duplicates"),
+    55:   (["Greedy", "Array", "Dynamic Programming"], ""),
+    62:   (["Dynamic Programming", "Matrix", "Math"], "grid DP"),
+    72:   (["Dynamic Programming", "String"], "two-string DP"),
+    79:   (["Backtracking", "DFS", "Matrix"], ""),
+    82:   (["Linked List", "Two Pointers"], "dummy head"),
+    90:   (["Backtracking", "Sorting"], "skip duplicates"),
+    91:   (["Dynamic Programming", "String"], ""),
+    139:  (["Dynamic Programming", "String", "Hash Table"], ""),
+    145:  (["Tree", "Stack"], "iterative traversal"),
+    189:  (["Array", "Math"], "in-place cyclic replacement"),
+    201:  (["Bit Manipulation"], "common binary prefix (shift)"),
+    202:  (["Hash Table", "Math"], "cycle detection"),
+    206:  (["Linked List"], ""),
+    208:  (["Trie", "Design", "String"], ".py script"),
+    213:  (["Dynamic Programming"], "circular house robber"),
+    239:  (["Sliding Window", "Monotonic Queue"], ""),
+    242:  (["Hash Table", "String"], ""),
+    254:  (["Backtracking", "Math"], ""),
+    290:  (["Hash Table", "String"], "bijection"),
+    300:  (["Dynamic Programming"], "O(n^2) DP"),
+    301:  (["Backtracking", "String", "BFS"], ""),
+    310:  (["Graph", "BFS"], "trim leaves (topological)"),
+    322:  (["BFS", "Dynamic Programming"], "BFS over amounts"),
+    347:  (["Heap / Quickselect", "Hash Table", "Sorting"], "quickselect"),
+    394:  (["Stack", "Recursion", "String"], ""),
+    413:  (["Dynamic Programming", "Array"], ""),
+    543:  (["Tree", "DFS"], "also a .py version; see basics/binary_tree.ipynb"),
+    560:  (["Prefix Sum", "Hash Table", "Array"], ""),
+    583:  (["Dynamic Programming", "String"], "via LCS (1143)"),
+    673:  (["Dynamic Programming"], "LIS counting"),
+    763:  (["Greedy", "Two Pointers", "Hash Table"], ""),
+    841:  (["Graph", "DFS", "BFS"], ""),
+    844:  (["Two Pointers", "Stack", "String"], "scan from the end"),
+    973:  (["Heap / Quickselect", "Sorting", "Math"], ""),
+    983:  (["Dynamic Programming"], "memoised recursion"),
+    997:  (["Graph"], "in/out degree"),
+    1060: (["Binary Search", "Array"], ""),
+    1143: (["Dynamic Programming", "String"], "LCS"),
+    1182: (["Binary Search", "Hash Table"], ""),
+    1231: (["Binary Search", "Greedy"], "binary search on the answer"),
+    1368: (["Graph", "BFS", "Shortest Path", "Matrix"], "0-1 BFS with a deque"),
+    1770: (["Dynamic Programming"], "2-D DP over (operation, left index)"),
+    1901: (["Binary Search", "Matrix"], ""),
+}
+
+# problems noted as to-do, without a solution file (moved from dp/README.md)
+TODO = {
+    1239: ("Maximum Length of a Concatenated String with Unique Characters",
+           ["Backtracking", "Bit Manipulation", "String"]),
+    3578: ("Count Partitions With Max-Min Difference at Most K",
+           ["Dynamic Programming", "Sliding Window", "Monotonic Queue", "Prefix Sum"]),
+}
+
+files = {}
+for f in os.listdir("."):
+    m = re.match(r"^(\d+)\. (.+)\.(ipynb|py)$", f)
+    if m and (int(m.group(1)) not in files or f.endswith(".ipynb")):
+        files[int(m.group(1))] = (m.group(2), f)
+missing = set(files) ^ set(P)
+assert not missing, f"index and files disagree: {missing}"
+for n, (ts, _) in P.items():
+    assert set(ts) <= set(TOPICS), (n, ts)
+
+def anchor(t):
+    return re.sub(r"[^a-z0-9 -]", "", t.lower()).replace(" ", "-")
+
+def link(n):
+    title, f = files[n]
+    return f"[{n}. {title}]({quote(f)})"
+
+def topic_links(ts):
+    return ", ".join(f"[{t}](#{anchor(t)})" for t in ts)
+
+out = ["# LeetCode problems by topic", "",
+       "Each problem links to its notebook, which keeps the full debugging history of the attempts. "
+       "A problem is listed under every topic it uses. Generated by [gen_topics.py](gen_topics.py); edit that, not this file. Problems marked *to do* have no solution yet.", "",
+       "Topics: " + " · ".join(f"[{t}](#{anchor(t)})" for t in TOPICS), "",
+       "Also: [all problems by number](#all-problems-by-number) · [SQL](#sql) · [basics](#basics)", ""]
+
+for t in TOPICS:
+    rows = [(n, link(n), P[n][1]) for n in P if t in P[n][0]]
+    rows += [(n, f"{n}. {title} (*to do*)", "") for n, (title, ts) in TODO.items() if t in ts]
+    rows.sort()
+    out += [f"## {t}", "", "| Problem | Notes |", "|---|---|"]
+    out += [f"| {l} | {note} |" for _, l, note in rows]
+    out.append("")
+
+out += ["## All problems by number", "", "| # | Problem | Topics |", "|---|---|---|"]
+rows = [(n, f"[{files[n][0]}]({quote(files[n][1])})", P[n][0]) for n in P]
+rows += [(n, f"{title} (*to do*)", ts) for n, (title, ts) in TODO.items()]
+out += [f"| {n} | {name} | {topic_links(ts)} |" for n, name, ts in sorted(rows)]
+out.append("")
+
+sql = sorted((int(re.search(r"\d+", f).group()), f) for f in os.listdir("sql") if f.endswith(".sql"))
+out += ["## SQL", "", "Notes on SQL functions and patterns are in [sql/README.md](sql/README.md). Solutions:", "",
+        " · ".join(f"[{n}](sql/{f})" for n, f in sql), ""]
+
+out += ["## Basics", "", "Notes that are not a single problem:", "",
+        "- [binary_tree.ipynb](basics/binary_tree.ipynb): building a `TreeNode`; 543. Diameter of Binary Tree and 437. Path Sum III",
+        "- [linked_list_basics.ipynb](basics/linked_list_basics.ipynb): how `ListNode` references and dummy heads behave",
+        "- [list_node.ipynb](basics/list_node.ipynb): `ListNode` helpers, tried on 82. Remove Duplicates from Sorted List II",
+        "- [scope_of_variables.ipynb](basics/scope_of_variables.ipynb): mutable vs immutable arguments in Python functions",
+        "- [bubble_sort.ipynb](basics/bubble_sort.ipynb): bubble sort", ""]
+
+open("topics.md", "w").write("\n".join(out))
+print(len(P), "problems,", len(TODO), "to do,", len(sql), "sql")
