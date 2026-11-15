@@ -210,12 +210,162 @@ NULL
 
 ---
 
+### Scalar Subqueries
+
+A **scalar subquery** is a subquery that returns **exactly 1 column and at most 1 row** - essentially a single value.
+
+#### Definition and Rules
+
+**Must satisfy both:**
+- ✅ Exactly **1 column** (not multiple)
+- ✅ At most **1 row** (0 or 1 row)
+
+```sql
+-- ✅ Valid: 1 column, 1 row
+SELECT (SELECT MAX(salary) FROM Employee) AS max_salary
+
+-- ✅ Valid: 1 column, 0 rows → NULL
+SELECT (SELECT salary FROM Employee WHERE id = 999) AS result
+
+-- ❌ ERROR: Multiple columns
+SELECT (SELECT name, salary FROM Employee LIMIT 1)
+-- Error: Operand should contain 1 column(s)
+
+-- ❌ ERROR: Multiple rows
+SELECT (SELECT salary FROM Employee)
+-- Error: Subquery returns more than 1 row
+```
+
+#### Where Scalar Subqueries Can Be Used
+
+Scalar subqueries can appear **almost anywhere a single value can**:
+
+**✅ SELECT clause** (most common)
+```sql
+SELECT 
+    name,
+    salary,
+    (SELECT AVG(salary) FROM Employee) AS company_avg
+FROM Employee
+```
+
+**✅ WHERE clause**
+```sql
+SELECT name, salary
+FROM Employee
+WHERE salary > (SELECT AVG(salary) FROM Employee)
+```
+
+**✅ HAVING clause**
+```sql
+SELECT department, AVG(salary) AS avg_sal
+FROM Employee
+GROUP BY department
+HAVING AVG(salary) > (SELECT AVG(salary) FROM Employee)
+```
+
+**✅ ORDER BY clause**
+```sql
+SELECT name, salary
+FROM Employee
+ORDER BY salary - (SELECT AVG(salary) FROM Employee) DESC
+```
+
+**✅ In expressions**
+```sql
+SELECT 
+    name,
+    salary,
+    salary * 100.0 / (SELECT SUM(salary) FROM Employee) AS pct_of_total
+FROM Employee
+```
+
+#### Correlated vs Non-Correlated
+
+**Non-correlated** (executes once):
+```sql
+SELECT 
+    name,
+    (SELECT AVG(salary) FROM Employee) AS avg  -- Runs once
+FROM Employee
+```
+
+**Correlated** (executes once per row):
+```sql
+SELECT 
+    e.name,
+    (SELECT AVG(salary) 
+     FROM Employee e2 
+     WHERE e2.dept_id = e.dept_id) AS dept_avg  -- Runs per row
+FROM Employee e
+```
+
+#### Common Use Cases
+
+**1. Finding Nth highest**
+```sql
+-- Second highest salary (returns NULL if doesn't exist)
+SELECT (
+    SELECT DISTINCT salary
+    FROM Employee
+    ORDER BY salary DESC
+    LIMIT 1 OFFSET 1
+) AS SecondHighestSalary
+```
+
+**2. Comparing to aggregates**
+```sql
+-- Employees earning more than average
+SELECT name, salary
+FROM Employee
+WHERE salary > (SELECT AVG(salary) FROM Employee)
+```
+
+**3. Adding computed columns**
+```sql
+SELECT 
+    name,
+    salary,
+    salary - (SELECT AVG(salary) FROM Employee) AS diff_from_avg
+FROM Employee
+```
+
+#### Scalar Subquery vs Other Subquery Types
+
+| Type | Columns | Rows | Example Use |
+|------|---------|------|-------------|
+| **Scalar Subquery** | Exactly 1 | 0 or 1 | `(SELECT MAX(salary) FROM Employee)` |
+| **Derived Table** | Any | Any | `FROM (SELECT * FROM Employee) sub` |
+| **IN Subquery** | 1 | Any | `WHERE id IN (SELECT id FROM Employee)` |
+
+#### Important: Multiple Columns Needs Derived Table
+
+```sql
+-- ❌ Cannot use scalar subquery for multiple columns
+SELECT (SELECT name, salary FROM Employee LIMIT 1)
+
+-- ✅ Use derived table in FROM clause instead
+SELECT sub.name, sub.salary
+FROM (
+    SELECT name, salary 
+    FROM Employee
+    WHERE department = 'IT'
+) sub
+
+-- ✅ Or use multiple scalar subqueries
+SELECT 
+    (SELECT MAX(salary) FROM Employee) AS max_sal,
+    (SELECT MIN(salary) FROM Employee) AS min_sal
+```
+
+---
+
 ### Key Takeaways
 
 1. **Window functions** are evaluated during SELECT → use CTE/subquery to filter on them
 2. **Aliases** are created during SELECT → can only use in ORDER BY (and LIMIT)
 3. **Aggregate functions** always return 1 row → NULL if no data
-4. **Scalar subqueries** convert empty results → NULL
+4. **Scalar subqueries** must return exactly 1 column and at most 1 row → 0 rows converts to NULL
 5. **Non-aggregate queries** can return 0 rows → empty result set
 
 ---
