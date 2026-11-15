@@ -1,7 +1,13 @@
 # SQL Learning Notes
 
-Notes for the Mosh course for SQL:
-https://codewithmosh.com/courses
+## Overview
+
+This folder contains all SQL learning materials:
+
+- **Course Notes** - Mosh SQL course topics (`topic_*.sql` files)
+  - Course: https://codewithmosh.com/courses
+- **Practice Problems** - [LeetCode SQL problems](./leetcode/) with solutions and notes
+- **Concepts & Reference** - SQL evaluation order, window functions, aliases, NULL handling (below)
 
 ---
 
