@@ -360,6 +360,214 @@ SELECT
 
 ---
 
+### Stored Functions and RETURN Scalar Subqueries
+
+#### What is a Stored Function?
+
+A **stored function** is saved in the database and can be reused across queries, similar to defining a function in programming.
+
+```sql
+-- Create function (saved in database)
+DELIMITER $$
+CREATE FUNCTION getNthHighestSalary(N INT) RETURNS INT
+BEGIN
+    DECLARE m INT;
+    SET m = N - 1;
+    RETURN (
+        SELECT DISTINCT salary
+        FROM Employee
+        ORDER BY salary DESC
+        LIMIT m, 1
+    );
+END$$
+DELIMITER ;
+
+-- Use it multiple times
+SELECT getNthHighestSalary(2);  -- 2nd highest
+SELECT getNthHighestSalary(5);  -- 5th highest
+```
+
+#### RETURN Creates Scalar Subquery Context
+
+**Key insight:** `RETURN (subquery)` automatically wraps the query as a **scalar subquery**, giving you NULL conversion for free!
+
+```sql
+CREATE FUNCTION getNthHighestSalary(N INT) RETURNS INT
+BEGIN
+    RETURN (
+        -- This entire query is a SCALAR SUBQUERY
+        WITH cte AS (
+            SELECT DISTINCT 
+                salary,
+                DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+            FROM Employee
+        )
+        SELECT salary  -- No MIN() needed!
+        FROM cte
+        WHERE rnk = N
+        -- If no match: 0 rows → NULL automatically
+    );
+END
+```
+
+**Why no MIN() needed:**
+- `RETURN (...)` creates scalar subquery context
+- If query returns 0 rows → automatically converts to NULL
+- Same behavior as `SELECT (subquery)` in standalone queries
+
+#### Comparison: Standalone Query vs Function
+
+**Standalone query (needs MIN or scalar subquery wrapper):**
+
+```sql
+-- ❌ Without aggregate: Returns 0 rows (empty result)
+WITH cte AS (
+    SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+    FROM Employee
+)
+SELECT salary
+FROM cte
+WHERE rnk = 2  -- If no match: returns 0 rows
+
+-- ✅ With MIN: Returns 1 row with NULL
+WITH cte AS (
+    SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+    FROM Employee
+)
+SELECT MIN(salary) AS SecondHighestSalary
+FROM cte
+WHERE rnk = 2  -- If no match: returns NULL
+
+-- ✅ With scalar subquery wrapper: Returns 1 row with NULL
+SELECT (
+    WITH cte AS (
+        SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+        FROM Employee
+    )
+    SELECT salary
+    FROM cte
+    WHERE rnk = 2
+) AS SecondHighestSalary  -- If no match: returns NULL
+```
+
+**Function RETURN (no MIN needed):**
+
+```sql
+-- ✅ RETURN automatically handles it
+CREATE FUNCTION getNthHighestSalary(N INT) RETURNS INT
+BEGIN
+    RETURN (
+        -- Scalar subquery context - no MIN() needed
+        WITH cte AS (
+            SELECT DISTINCT salary,
+                   DENSE_RANK() OVER (ORDER BY salary DESC) AS rnk
+            FROM Employee
+        )
+        SELECT salary
+        FROM cte
+        WHERE rnk = N  -- If no match: returns NULL automatically
+    );
+END
+```
+
+#### Three Ways to Get NULL When No Match
+
+| Method | Context | Syntax |
+|--------|---------|--------|
+| **Aggregate Function** | Standalone query | `SELECT MIN(salary) FROM ... WHERE ...` |
+| **Scalar Subquery** | Standalone query | `SELECT (SELECT salary FROM ... WHERE ...)` |
+| **Function RETURN** | Stored function | `RETURN (SELECT salary FROM ... WHERE ...)` |
+
+**All three convert 0 rows → NULL when no match!**
+
+#### How to Create and Use Functions
+
+**1. Create the function (one time):**
+```sql
+DELIMITER $$
+CREATE FUNCTION getNthHighestSalary(N INT) RETURNS INT
+BEGIN
+    RETURN (
+        SELECT DISTINCT salary
+        FROM Employee
+        ORDER BY salary DESC
+        LIMIT N-1, 1
+    );
+END$$
+DELIMITER ;
+```
+
+**2. Call the function (many times):**
+```sql
+-- Direct call
+SELECT getNthHighestSalary(2);
+
+-- In WHERE clause
+SELECT name, salary
+FROM Employee
+WHERE salary = getNthHighestSalary(1);
+
+-- In expressions
+SELECT 
+    name,
+    salary,
+    salary - getNthHighestSalary(1) AS diff_from_highest
+FROM Employee;
+```
+
+**3. View existing functions:**
+```sql
+SHOW FUNCTION STATUS WHERE Db = 'your_database';
+SHOW CREATE FUNCTION getNthHighestSalary;
+```
+
+**4. Drop function when done:**
+```sql
+DROP FUNCTION IF EXISTS getNthHighestSalary;
+```
+
+#### Stored Functions vs Python Functions
+
+| Aspect | MySQL Stored Function | Python Function |
+|--------|----------------------|-----------------|
+| **Stored in** | Database server | .py file on disk |
+| **Runs on** | Database server | Your computer/app server |
+| **Accessible by** | Anyone with DB access | Only your Python app |
+| **Persists** | Until DROP FUNCTION | While file exists |
+| **Can call from** | Any SQL query, any client | Only from Python code |
+| **Network overhead** | No extra round-trips | Query sent over network |
+
+#### MySQL LIMIT Restriction
+
+**Why use a variable for LIMIT?**
+
+```sql
+-- ❌ MySQL doesn't allow expressions in LIMIT
+LIMIT N-1, 1  -- ERROR: Can't use expression
+
+-- ✅ Must use variable
+DECLARE m INT;
+SET m = N - 1;
+LIMIT m, 1  -- Works with variable
+```
+
+MySQL's LIMIT clause requires a constant or variable, not an expression.
+
+#### When to Use Stored Functions
+
+**✅ Good use cases:**
+- Complex calculations reused across queries
+- Finding Nth highest/lowest values
+- Encapsulating business logic (tax rates, bonuses)
+- Functions needed by multiple applications
+
+**❌ When to avoid:**
+- Simple operations (just use regular SQL)
+- Frequently changing logic (harder to update than app code)
+- Heavy processing (can slow down database)
+
+---
+
 ### Key Takeaways
 
 1. **Window functions** are evaluated during SELECT → use CTE/subquery to filter on them
@@ -367,5 +575,6 @@ SELECT
 3. **Aggregate functions** always return 1 row → NULL if no data
 4. **Scalar subqueries** must return exactly 1 column and at most 1 row → 0 rows converts to NULL
 5. **Non-aggregate queries** can return 0 rows → empty result set
+6. **RETURN (subquery) in functions** creates scalar subquery context → automatic NULL conversion
 
 ---
