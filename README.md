@@ -9,7 +9,7 @@ Personal study notes on math models, programming, data/ML engineering, algorithm
 ├── math-models/                 statistical and mathematical models
 │   └── hidden-markov-models/    HMM derivations + NumPy implementation
 ├── programming/                 languages and tools: sql, git, python, cpp, javascript, docker
-├── data-engineering/            data engineering, PySpark, AWS / SageMaker ML
+├── data-engineering/            data engineering, dbt + Jinja, PySpark, AWS / SageMaker ML
 ├── algorithms/                  leetcode notebooks (python) and SQL problems
 ├── papers/                      journal-club notes
 ├── _templates/                  template for new topics
@@ -27,6 +27,7 @@ Personal study notes on math models, programming, data/ML engineering, algorithm
 | Programming | [C++](programming/cpp/) | C++ Primer, Mosh course | Course notes |
 | Programming | [JavaScript](programming/javascript/) | Udemy, Galvanize prep | Course notes |
 | Programming | [Docker](programming/docker/) | Mosh course | Course notes |
+| Data engineering | [dbt and Jinja](data-engineering/dbt/) | own guide + toy project | Complete |
 | Data engineering | [Intro to data engineering](data-engineering/intro/) | Coursera | Course notes |
 | Data engineering | [PySpark](data-engineering/pyspark/) | Udemy, Databricks | Course notes |
 | Data engineering | [AWS and SageMaker ML](data-engineering/aws-ml/) | Udemy, Udacity | Course notes |

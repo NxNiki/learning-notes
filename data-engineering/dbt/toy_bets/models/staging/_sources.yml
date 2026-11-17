@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: raw                 # the name used in source('raw', ...)
+    schema: main              # where the tables really are (dbt seed writes to main)
+    tables:
+      - name: raw_bets
+        description: One row per version of a bet; a bet that settles late arrives twice.

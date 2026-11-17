@@ -1,0 +1,30 @@
+version: 2
+
+models:
+  - name: fct_bets
+    description: One row per bet, latest version; incremental on loaded_at.
+    columns:
+      - name: bet_id
+        tests: [unique, not_null]
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['pending', 'settled']
+      - name: user_id
+        tests:
+          - relationships:
+              to: ref('users')
+              field: user_id
+      - name: bet_amount
+        tests: [non_negative]           # the generic test in tests/generic/non_negative.sql
+      - name: ab_group
+        tests:
+          - not_null:
+              config:
+                severity: warn          # report it, but do not fail the build
+
+  - name: user_day
+    description: Bet statistics per user and bet_date.
+    tests:
+      - unique_columns:
+          columns: [user_id, bet_date]
