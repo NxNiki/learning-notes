@@ -1,13 +1,13 @@
-{#- The metrics of user_day, as (alias, SQL expression). A "config macro": it
+{#- The metrics of driver_day, as (alias, SQL expression). A "config macro": it
     renders nothing and only hands back a value with return(). Adding a pair
-    here adds five columns to user_day. -#}
-{% macro bet_metrics() %}
+    here adds four columns to driver_day. -#}
+{% macro trip_metrics() %}
     {{ return([
-        ('bet_amount', 'bet_amount'),
-        ('payout', 'payout'),
-        ('profit', 'profit'),
-        ('rtp', 'rtp'),
-        ('delta_t_seconds', 'delta_t_seconds'),
+        ('fare', 'fare'),
+        ('tip', 'tip'),
+        ('total', 'total'),
+        ('tip_rate', 'tip_rate'),
+        ('gap_seconds', 'gap_seconds'),
     ]) }}
 {% endmacro %}
 

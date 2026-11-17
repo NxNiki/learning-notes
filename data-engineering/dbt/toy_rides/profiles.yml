@@ -1,9 +1,9 @@
 # Connection settings. Normally this file lives in ~/.dbt/; here it sits in the
-# project and every command passes --profiles-dir . (see README, chapter 1).
-toy_bets:
+# project folder, which dbt searches first (see README, Section 1.3).
+toy_rides:
   target: dev
   outputs:
     dev:
       type: duckdb
-      path: "{{ env_var('TOY_BETS_DB', 'toy_bets.duckdb') }}"
+      path: "{{ env_var('TOY_RIDES_DB', 'toy_rides.duckdb') }}"
       threads: 1

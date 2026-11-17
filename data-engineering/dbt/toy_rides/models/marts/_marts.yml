@@ -1,30 +1,30 @@
 version: 2
 
 models:
-  - name: fct_bets
-    description: One row per bet, latest version; incremental on loaded_at.
+  - name: fct_trips
+    description: One row per trip, latest version; incremental on loaded_at.
     columns:
-      - name: bet_id
+      - name: trip_id
         tests: [unique, not_null]
       - name: status
         tests:
           - accepted_values:
-              values: ['pending', 'settled']
-      - name: user_id
+              values: ['completed', 'cancelled']
+      - name: driver_id
         tests:
           - relationships:
-              to: ref('users')
-              field: user_id
-      - name: bet_amount
+              to: ref('drivers')
+              field: driver_id
+      - name: fare
         tests: [non_negative]           # the generic test in tests/generic/non_negative.sql
-      - name: ab_group
+      - name: experiment_group
         tests:
           - not_null:
               config:
                 severity: warn          # report it, but do not fail the build
 
-  - name: user_day
-    description: Bet statistics per user and bet_date.
+  - name: driver_day
+    description: Trip statistics per driver and trip_date.
     tests:
       - unique_columns:
-          columns: [user_id, bet_date]
+          columns: [driver_id, trip_date]

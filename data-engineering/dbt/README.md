@@ -2,18 +2,18 @@
 
 dbt (data build tool) turns a folder of `SELECT` statements into tables and views in a warehouse, in the right order, and tests them. The SQL files are templates written in Jinja, a small template language from Python, so a dbt project is really two languages mixed together. This guide teaches both, one idea at a time, until you can open any model or macro in a real project and say exactly what SQL it produces and when it runs.
 
-One small project, `toy_bets/`, runs through every chapter: a few players place bets, one bet settles a day late, and we build a per-bet fact table and per-player daily statistics. Every output shown in this guide was produced by running that project or the Jinja examples, and the tests in this folder check them, so the guide and the code cannot drift apart.
+One small project, `toy_rides/`, runs through every chapter. It is the data of a ride-hailing company in the style of Uber or Lyft: drivers complete trips, a rider adds a tip the day after a trip, and we build a per-trip fact table and per-driver daily statistics (trips, fares, tips, and the idle time between trips). Shorter examples from other industries (e-commerce orders, ad clicks, app activity, retail prices) show where the same patterns appear; the table at the end of Section 1.2 maps them. Every output shown in this guide was produced by running that project or the Jinja examples, and the tests in this folder check them, so the guide and the code cannot drift apart.
 
 **Files in this folder**
 
 | File | Contents |
 | --- | --- |
 | `README.md` | This guide |
-| `toy_bets/` | A complete dbt project (dbt 1.7 + DuckDB, a database in a single local file, no server) |
+| `toy_rides/` | A complete dbt project (dbt 1.7 + DuckDB, a database in a single local file, no server) |
 | `render.py` | Renders dbt-style Jinja without dbt or a database (Chapter 9) |
 | `test_jinja_basics.py` | Checks the Jinja examples of Chapters 2, 3, 6 and 10 |
-| `test_toy_bets.py` | Builds `toy_bets` with dbt and checks the lab of Section 1.6, the tables of Chapters 5–8, the state selection of Chapter 11, and `render.py` against `dbt compile` (skipped when dbt is not installed) |
-| `test_exercises.py` | Applies the solution of each exercise (Chapter 13) to a copy of `toy_bets` and checks the answers given there |
+| `test_toy_rides.py` | Builds `toy_rides` with dbt and checks the lab of Section 1.6, the tables of Chapters 5–8, the state selection of Chapter 11, and `render.py` against `dbt compile` (skipped when dbt is not installed) |
+| `test_exercises.py` | Applies the solution of each exercise (Chapter 13) to a copy of `toy_rides` and checks the answers given there |
 | `requirements.txt` | dbt-core and dbt-duckdb, pinned to 1.7 |
 
 The guide is pinned to dbt 1.7, which is past its end of support but still common in production setups; Chapter 12 lists what changed after it. The toy project also builds unchanged on dbt 1.10.
@@ -71,23 +71,23 @@ Two folders under `target/` are worth knowing by heart:
 ### 1.2 The toy project
 
 ```
-toy_bets/
+toy_rides/
 ├── dbt_project.yml          project name, folder defaults, vars
 ├── profiles.yml             how to connect (usually lives in ~/.dbt/)
 ├── seeds/                   CSV files that dbt loads as tables
-│   ├── raw_bets.csv
-│   └── users.csv
+│   ├── raw_trips.csv
+│   └── drivers.csv
 ├── models/
 │   ├── staging/
 │   │   ├── _sources.yml     declares raw tables dbt did not build
-│   │   ├── stg_bets.sql     view: latest version of each bet
-│   │   └── int_bet_outcomes.sql   ephemeral: profit, rtp, is_win
+│   │   ├── stg_trips.sql    view: latest version of each trip
+│   │   └── int_trip_amounts.sql   ephemeral: total, tip_rate, has_tip
 │   └── marts/
 │       ├── _marts.yml       descriptions and tests
-│       ├── fct_bets.sql     incremental table, one row per bet
-│       └── user_day.sql     table, stats per user and day
+│       ├── fct_trips.sql    incremental table, one row per trip
+│       └── driver_day.sql   table, stats per driver and day
 ├── snapshots/
-│   └── bets_snapshot.sql    history of every bet (Section 8.3)
+│   └── trips_snapshot.sql   history of every trip (Section 8.3)
 ├── macros/                  reusable Jinja functions
 └── tests/                   singular tests + custom generic tests
 ```
@@ -96,39 +96,52 @@ Its DAG, as dbt infers it from `ref()` and `source()` calls (Chapter 3):
 
 ```mermaid
 flowchart LR
-    raw[("source raw.raw_bets<br/>(seed)")] --> stg[stg_bets<br/>view]
-    stg --> int[int_bet_outcomes<br/>ephemeral]
-    int --> fct[fct_bets<br/>incremental]
-    fct --> ud[user_day<br/>table]
-    stg --> snap[bets_snapshot<br/>snapshot]
-    users[("seed users")] -.->|relationships test| fct
+    raw[("source raw.raw_trips<br/>(seed)")] --> stg[stg_trips<br/>view]
+    stg --> int[int_trip_amounts<br/>ephemeral]
+    int --> fct[fct_trips<br/>incremental]
+    fct --> ud[driver_day<br/>table]
+    stg --> snap[trips_snapshot<br/>snapshot]
+    drivers[("seed drivers")] -.->|relationships test| fct
 ```
 
-The raw data, `seeds/raw_bets.csv`. Bet 4 appears twice: it was `pending` when first loaded on Jan 1 and `settled` with a payout of 40 when loaded again on Jan 2.
+The raw data, `seeds/raw_trips.csv`, as an ingestion job would load it every night at 23:00 (`loaded_at`). Trip 4 appears twice: it had no tip when first loaded on Jan 1, and the rider added a tip of 6 the next day, so the trip arrived again on Jan 2. Trip 5 is a rider cancellation with no fee: fare 0.
 
-| bet_id | user_id | bet_amount | payout | status | created_at | loaded_at |
+| trip_id | driver_id | fare | tip | status | started_at | loaded_at |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 101 | 10 | 0 | settled | 01-01 09:00 | 01-01 23:00 |
-| 2 | 101 | 10 | 25 | settled | 01-01 09:01 | 01-01 23:00 |
-| 3 | 101 | 20 | 0 | settled | 01-01 09:03 | 01-01 23:00 |
-| 4 | 102 | 5 | 0 | pending | 01-01 10:00 | 01-01 23:00 |
-| 5 | 102 | 5 | 15 | settled | 01-01 10:02 | 01-01 23:00 |
-| 4 | 102 | 5 | 40 | settled | 01-01 10:00 | 01-02 23:00 |
-| 6 | 101 | 10 | 10 | settled | 01-02 08:00 | 01-02 23:00 |
-| 7 | 103 | 50 | 0 | settled | 01-02 12:00 | 01-02 23:00 |
-| 8 | 103 | 50 | 120 | settled | 01-02 12:05 | 01-02 23:00 |
+| 1 | 101 | 12 | 0 | completed | 01-01 09:00 | 01-01 23:00 |
+| 2 | 101 | 25 | 5 | completed | 01-01 09:30 | 01-01 23:00 |
+| 3 | 101 | 18 | 0 | completed | 01-01 10:10 | 01-01 23:00 |
+| 4 | 102 | 30 | 0 | completed | 01-01 10:00 | 01-01 23:00 |
+| 5 | 102 | 0 | 0 | cancelled | 01-01 10:45 | 01-01 23:00 |
+| 4 | 102 | 30 | **6** | completed | 01-01 10:00 | **01-02 23:00** |
+| 6 | 101 | 15 | 3 | completed | 01-02 08:00 | 01-02 23:00 |
+| 7 | 103 | 40 | 0 | completed | 01-02 12:00 | 01-02 23:00 |
+| 8 | 103 | 22 | 4 | completed | 01-02 12:50 | 01-02 23:00 |
+
+**The same problems in other industries.** Every feature of the toy project answers a problem that data teams meet in most industries. When a chapter uses the rides, picture your own domain in the right-hand columns.
+
+| Problem | In `toy_rides` | Elsewhere | dbt tool |
+| --- | --- | --- | --- |
+| A record changes after it was first loaded | a tip added the day after the trip | an Amazon order refunded or returned a week later; a Google Ads click marked invalid after fraud review | incremental model with `unique_key` (Chapter 5) |
+| Several versions of a row in the raw data; keep the latest | trip 4 loaded twice | change-data-capture (CDC) feeds from an orders database, which send every update as a new row | `ROW_NUMBER()` in a staging model (`stg_trips`) |
+| A ratio whose denominator can be 0 | tip rate of a free cancellation | click-through rate of an ad with no impressions; conversion rate of a product page with no visits | snippet macro `safe_divide` (Section 6.1) |
+| The same statistics for many metrics | avg / median / min / max of fare, tip, ... per driver-day | daily engagement metrics per user at Meta; per-store sales metrics at Home Depot | config macro + generator macro (Sections 6.2, 6.3) |
+| Experiment groups from rules | drivers in a pay-screen test | a Google search ranking test; a Meta feed test with a holdout group | compiler macro over a `var` (Section 6.4) |
+| Time between events of the same entity | a driver's idle time between trips | time between a customer's orders (repeat purchase); session gaps in app activity | window function `LAG`, and its incremental trap (Section 5.7) |
+| Keep the history of a value that is overwritten at the source | the tip of each trip over time | product prices and stock levels at a retailer such as Home Depot; a customer's address or loyalty tier | snapshot (Section 8.3) |
+| Catch bad data before anyone reads it | a tip larger than the fare | an order with negative quantity; a ride with a fare above any surge cap | tests (Chapter 7) |
 
 ### 1.3 Connecting: profiles and targets
 
-`dbt_project.yml` names a profile (`profile: toy_bets`); `profiles.yml` says how to connect for that profile. A profile has one or more **targets** (for example `dev` and `prod`), each a set of connection settings; `target:` picks the default and `--target prod` picks another.
+`dbt_project.yml` names a profile (`profile: toy_rides`); `profiles.yml` says how to connect for that profile. A profile has one or more **targets** (for example `dev` and `prod`), each a set of connection settings; `target:` picks the default and `--target prod` picks another.
 
 ```yaml
-toy_bets:
+toy_rides:
   target: dev
   outputs:
     dev:
       type: duckdb                 # the adapter: which database plugin dbt loads
-      path: "{{ env_var('TOY_BETS_DB', 'toy_bets.duckdb') }}"
+      path: "{{ env_var('TOY_RIDES_DB', 'toy_rides.duckdb') }}"
       threads: 1                   # how many models dbt builds in parallel
 ```
 
@@ -142,15 +155,15 @@ dbt looks for `profiles.yml` in the current folder first, then in `~/.dbt/`; `--
 | --- | --- |
 | `dbt debug` | Checks `profiles.yml` and the connection |
 | `dbt parse` | Reads every file, builds the DAG; no SQL is run |
-| `dbt compile -s user_day` | Renders Jinja into `target/compiled/`; runs no model (but does run `run_query` calls, Section 3.6) |
+| `dbt compile -s driver_day` | Renders Jinja into `target/compiled/`; runs no model (but does run `run_query` calls, Section 3.6) |
 | `dbt seed` | Loads `seeds/*.csv` into tables |
-| `dbt run -s fct_bets` | Builds the selected models |
+| `dbt run -s fct_trips` | Builds the selected models |
 | `dbt snapshot` | Runs the snapshots (Section 8.3) |
-| `dbt show -s fct_bets` / `dbt show --inline "SELECT ..."` | Runs a model's `SELECT` (or any query) and prints the first rows; writes nothing |
-| `dbt test -s fct_bets` | Runs the selected tests |
+| `dbt show -s fct_trips` / `dbt show --inline "SELECT ..."` | Runs a model's `SELECT` (or any query) and prints the first rows; writes nothing |
+| `dbt test -s fct_trips` | Runs the selected tests |
 | `dbt build` | seed + run + snapshot + test, in DAG order; a failing test skips everything downstream of it |
-| `dbt run-operation row_count --args '{model_name: fct_bets}'` | Runs one macro by hand (Section 6.5) |
-| `dbt ls -s +user_day` | Lists what a selection would pick, without running it |
+| `dbt run-operation row_count --args '{model_name: fct_trips}'` | Runs one macro by hand (Section 6.5) |
+| `dbt ls -s +driver_day` | Lists what a selection would pick, without running it |
 | `dbt docs generate && dbt docs serve` | Builds and opens a website of models, columns and the DAG |
 
 Common flags: `-s` / `--select` (Section 4.5), `--exclude`, `--vars '{as_of: "2026-01-01"}'`, `--full-refresh` (Chapter 5), `--target prod`.
@@ -168,14 +181,14 @@ So code that needs the database while rendering (`run_query`, Section 3.6) must 
 
 ### 1.6 Lab: a first session, step by step
 
-Everything below runs on your laptop: DuckDB keeps the whole warehouse in one file, `toy_bets.duckdb`. Activate the virtual environment from the setup above, then:
+Everything below runs on your laptop: DuckDB keeps the whole warehouse in one file, `toy_rides.duckdb`. Activate the virtual environment from the setup above, then:
 
 ```bash
-cd data-engineering/dbt/toy_bets
+cd data-engineering/dbt/toy_rides
 export DBT_SEND_ANONYMOUS_USAGE_STATS=false      # optional: no usage statistics sent to dbt Labs
 ```
 
-`profiles.yml` sits in this folder, and dbt looks in the current folder first, so no `~/.dbt/` set-up is needed. To start over at any point, delete the database: `rm toy_bets.duckdb`. `target/`, `logs/` and the database are git-ignored.
+`profiles.yml` sits in this folder, and dbt looks in the current folder first, so no `~/.dbt/` set-up is needed. To start over at any point, delete the database: `rm toy_rides.duckdb`. `target/`, `logs/` and the database are git-ignored.
 
 **Step 1. Check the connection.**
 
@@ -192,16 +205,16 @@ dbt build
 ```
 
 ```
-1 of 14 ERROR creating sql view model main.stg_bets ...... [ERROR]
-2 of 14 OK loaded seed file main.raw_bets ................ [INSERT 9]
-3 of 14 OK loaded seed file main.users ................... [INSERT 3]
-4 of 14 SKIP relation snapshots.bets_snapshot ............ [SKIP]
-5 of 14 SKIP relation main.fct_bets ...................... [SKIP]
+1 of 14 ERROR creating sql view model main.stg_trips ...... [ERROR]
+2 of 14 OK loaded seed file main.drivers .................. [INSERT 3]
+3 of 14 OK loaded seed file main.raw_trips ................ [INSERT 9]
+4 of 14 SKIP relation snapshots.trips_snapshot ............ [SKIP]
+5 of 14 SKIP relation main.fct_trips ...................... [SKIP]
 ...
-  Catalog Error: Table with name raw_bets does not exist!
+  Catalog Error: Table with name raw_trips does not exist!
 ```
 
-Read the order: dbt built `stg_bets` **before** loading the seed `raw_bets`. `stg_bets` reads the table with `source('raw', 'raw_bets')`, and a source means "a table loaded by something outside dbt", so dbt draws no edge from the seed to it. In a real project the outside loader (an ingestion job) fills the raw tables before dbt runs; here `dbt seed` plays that loader. Everything downstream of the error is `SKIP`ped: dbt never builds on top of a failed model. Lesson: `ref()` creates a DAG edge, `source()` does not.
+Read the order: dbt built `stg_trips` **before** loading the seed `raw_trips`. `stg_trips` reads the table with `source('raw', 'raw_trips')`, and a source means "a table loaded by something outside dbt", so dbt draws no edge from the seed to it. In a real project the outside loader (an ingestion job) fills the raw tables before dbt runs; here `dbt seed` plays that loader. Everything downstream of the error is `SKIP`ped: dbt never builds on top of a failed model. Lesson: `ref()` creates a DAG edge, `source()` does not.
 
 **Step 3. Load the raw data, then build the world as of Jan 1.**
 
@@ -210,52 +223,52 @@ dbt seed
 dbt run --vars '{as_of: "2026-01-01 23:59:59"}'
 ```
 
-`dbt run` prints one line per model, in DAG order: `stg_bets` (view), `fct_bets` (incremental), `user_day` (table). `int_bet_outcomes` is missing from the list because it is ephemeral (Section 4.1). Look at the result without leaving dbt:
+`dbt run` prints one line per model, in DAG order: `stg_trips` (view), `fct_trips` (incremental), `driver_day` (table). `int_trip_amounts` is missing from the list because it is ephemeral (Section 4.1). Look at the result without leaving dbt:
 
 ```bash
-dbt show -s fct_bets
-dbt show --inline "SELECT bet_id, payout, status FROM {{ ref('fct_bets') }} WHERE bet_id = 4"
+dbt show -s fct_trips
+dbt show --inline "SELECT trip_id, fare, tip FROM {{ ref('fct_trips') }} WHERE trip_id = 4"
 ```
 
-Bet 4 is `pending` with payout 0: the Jan 2 row of the CSV has not "arrived" yet.
+Trip 4 has tip 0: the Jan 2 row of the CSV, with the tip, has not "arrived" yet.
 
 **Step 4. Read what dbt sent to the database.** Open these two files side by side:
 
-- `target/compiled/toy_bets/models/marts/fct_bets.sql`: the `SELECT` after Jinja. The `ref()` became `__dbt__cte__int_bet_outcomes`, the `{% if is_incremental() %}` block is gone.
-- `target/run/toy_bets/models/marts/fct_bets.sql`: the same `SELECT` wrapped in `create table ... as (...)`.
+- `target/compiled/toy_rides/models/marts/fct_trips.sql`: the `SELECT` after Jinja. The `ref()` became `__dbt__cte__int_trip_amounts`, the `{% if is_incremental() %}` block is gone.
+- `target/run/toy_rides/models/marts/fct_trips.sql`: the same `SELECT` wrapped in `create table ... as (...)`.
 
-**Step 5. Snapshot the bets.**
+**Step 5. Snapshot the trips.**
 
 ```bash
 dbt snapshot
 ```
 
-This creates `snapshots.bets_snapshot` with one row per bet, `dbt_valid_to` empty (Section 8.3).
+This creates `snapshots.trips_snapshot` with one row per trip, `dbt_valid_to` empty (Section 8.3).
 
 **Step 6. Move to Jan 2: the incremental run.**
 
 ```bash
 dbt run
-dbt show --inline "SELECT bet_id, payout, status, loaded_at FROM {{ ref('fct_bets') }} ORDER BY bet_id"
+dbt show --inline "SELECT trip_id, fare, tip, loaded_at FROM {{ ref('fct_trips') }} ORDER BY trip_id"
 ```
 
-Without `--vars`, `as_of` is the default from `dbt_project.yml`, Jan 2. Bet 4 is now `settled` with payout 40, and bets 6–8 have arrived. Open `target/run/toy_bets/models/marts/fct_bets.sql` again: it is now a `delete from ... insert into ...` pair, not a `create table`, because the table existed (Chapter 5 walks through it).
+Without `--vars`, `as_of` is the default from `dbt_project.yml`, Jan 2. Trip 4 now has its tip of 6, and trips 6–8 have arrived. Open `target/run/toy_rides/models/marts/fct_trips.sql` again: it is now a `delete from ... insert into ...` pair, not a `create table`, because the table existed (Chapter 5 walks through it).
 
 **Step 7. Snapshot again, and see history.**
 
 ```bash
 dbt snapshot
-dbt show --inline "SELECT bet_id, payout, status, dbt_valid_from, dbt_valid_to FROM {{ ref('bets_snapshot') }} WHERE bet_id = 4"
+dbt show --inline "SELECT trip_id, fare, tip, dbt_valid_from, dbt_valid_to FROM {{ ref('trips_snapshot') }} WHERE trip_id = 4"
 ```
 
 ```
-| bet_id | payout | status  |      dbt_valid_from |        dbt_valid_to |
-| ------ | ------ | ------- | ------------------- | ------------------- |
-|      4 |      0 | pending | 2026-01-01 23:00:00 | 2026-01-02 23:00:00 |
-|      4 |     40 | settled | 2026-01-02 23:00:00 |                     |
+| trip_id | fare | tip |      dbt_valid_from |        dbt_valid_to |
+| ------- | ---- | --- | ------------------- | ------------------- |
+|       4 |   30 |   0 | 2026-01-01 23:00:00 | 2026-01-02 23:00:00 |
+|       4 |   30 |   6 | 2026-01-02 23:00:00 |                     |
 ```
 
-`fct_bets` keeps only the latest version of bet 4; the snapshot keeps both.
+`fct_trips` keeps only the latest version of trip 4; the snapshot keeps both.
 
 **Step 8. Test, then break a test on purpose.**
 
@@ -263,27 +276,27 @@ dbt show --inline "SELECT bet_id, payout, status, dbt_valid_from, dbt_valid_to F
 dbt test                     # Done. PASS=8 WARN=0 ERROR=0
 ```
 
-Now edit `tests/assert_payout_at_most_10x.sql` and change `10 * bet_amount` to `2 * bet_amount`. Run:
+Now edit `tests/assert_tip_at_most_fare.sql` and change `WHERE tip > fare` to `WHERE tip > 0.1 * fare` (a tip above 10% of the fare). Run:
 
 ```bash
 dbt build
 ```
 
 ```
-7 of 14 FAIL 4 assert_payout_at_most_10x ........ [FAIL 4]
-13 of 14 SKIP relation main.user_day .............. [SKIP]
-14 of 14 SKIP test unique_columns_user_day_... .... [SKIP]
+7 of 14 FAIL 4 assert_tip_at_most_fare ............ [FAIL 4]
+13 of 14 SKIP relation main.driver_day ............. [SKIP]
+14 of 14 SKIP test unique_columns_driver_day_... ... [SKIP]
 Done. PASS=11 WARN=0 ERROR=1 SKIP=2 TOTAL=14
 ```
 
-`FAIL 4` means the test query returned 4 rows (bets 2, 4, 5 and 8 paid more than twice the stake). The test is attached to `fct_bets`, so `dbt build` refuses to build `user_day` from it. This is the reason to use `build` in schedules rather than `run` then `test`: bad data stops where it is found. Change the `2` back to `10`.
+`FAIL 4` means the test query returned 4 rows (trips 2, 4, 6 and 8 have tips of 18–20% of the fare). The test is attached to `fct_trips`, so `dbt build` refuses to build `driver_day` from it. This is the reason to use `build` in schedules rather than `run` then `test`: bad data stops where it is found, before a dashboard or a driver-pay job reads it. Change the condition back to `tip > fare`.
 
 **Step 9. Select parts of the DAG.**
 
 ```bash
-dbt ls -s +user_day            # user_day and everything it depends on
-dbt ls -s stg_bets+            # stg_bets and everything that depends on it
-dbt run -s user_day            # rebuild one model only
+dbt ls -s +driver_day          # driver_day and everything it depends on
+dbt ls -s stg_trips+           # stg_trips and everything that depends on it
+dbt run -s driver_day          # rebuild one model only
 ```
 
 **Step 10. Browse the documentation site.**
@@ -293,7 +306,7 @@ dbt docs generate
 dbt docs serve                 # opens http://localhost:8080; Ctrl-C to stop
 ```
 
-Click `fct_bets`: its description and column tests come from `_marts.yml`, its compiled SQL from the same files you read in Step 4, and the button at the bottom right draws the DAG.
+Click `fct_trips`: its description and column tests come from `_marts.yml`, its compiled SQL from the same files you read in Step 4, and the button at the bottom right draws the DAG.
 
 You have now used every main command. The rest of the guide explains what each piece does and why.
 
@@ -317,11 +330,11 @@ render("{{ 1 + 2 }}")          # '3'
 Everything outside the brackets is copied to the output unchanged.
 
 ```jinja
-{{ 1 + 2 }} {{ 'bet' ~ '_' ~ 3 }} {{ [1, 2, 3] | length }} {{ 'abc' | upper }}
+{{ 1 + 2 }} {{ 'week' ~ '_' ~ 3 }} {{ [1, 2, 3] | length }} {{ 'abc' | upper }}
 ```
-renders as `3 bet_3 3 ABC`.
+renders as `3 week_3 3 ABC`.
 
-`~` joins any values into a string (it converts numbers for you). `+` also joins strings, but `'bet_' + 3` is an error (`can only concatenate str (not "int") to str`), which is why dbt code uses `~` almost everywhere.
+`~` joins any values into a string (it converts numbers for you). `+` also joins strings, but `'week_' + 3` is an error (`can only concatenate str (not "int") to str`), which is why dbt code uses `~` almost everywhere.
 
 `a{# not in the output #}b` renders as `ab`.
 
@@ -329,12 +342,12 @@ renders as `3 bet_3 3 ABC`.
 
 | Type | Literal | Notes |
 | --- | --- | --- |
-| string | `'payout'` or `"payout"` | |
+| string | `'tip'` or `"tip"` | |
 | number | `3`, `0.25` | |
 | boolean | `true` / `false` (also `True` / `False`) | |
 | none | `none` (also `None`) | like Python `None`; in SQL it prints as `None`, not `NULL` |
 | list | `['a', 'b']` | |
-| tuple | `('rtp', 'payout / bet_amount')` | a fixed pair; used for (alias, expression) lists |
+| tuple | `('tip_rate', 'tip / fare')` | a fixed pair; used for (alias, expression) lists |
 | dict | `{'label': 'A', 'values': [1, 3]}` | |
 
 Read an item with `rule['label']`. Jinja also accepts `rule.label`, but beware: for a dict, `rule.values` is the dict's **method** `values()`, not the key `'values'` (Chapter 10). Write `rule['values']`. Most methods of Python strings, lists and dicts also work: `rule.get('op', 'in')`, `name.startswith('stg_')`, `cols.append(x)`.
@@ -343,7 +356,7 @@ Read an item with `rule['label']`. Jinja also accepts `rule.label`, but beware: 
 
 ```jinja
 {% set n = 3 %}
-{% set cols = ['bet_amount', 'payout'] %}
+{% set cols = ['fare', 'tip'] %}
 ```
 
 There is also a **block** form that captures rendered text into a variable; dbt code uses it for queries it is about to run:
@@ -351,13 +364,13 @@ There is also a **block** form that captures rendered text into a variable; dbt 
 ```jinja
 {% set q %}
 SELECT COUNT(*)
-FROM bets
+FROM orders
 {% endset %}[{{ q | trim }}]
 ```
 renders as:
 ```
 [SELECT COUNT(*)
-FROM bets]
+FROM orders]
 ```
 
 ### 2.4 `if`
@@ -377,9 +390,10 @@ renders as `True False True True` (`x` was never set). Others: `is string`, `is 
 ### 2.5 `for` loops and the `loop` variable
 
 ```jinja
-{% for c in ['a', 'b', 'c'] %}{{ loop.index0 }}:{{ c }}{{ ', ' if not loop.last }}{% endfor %}
+{% for c in ['clicks', 'impressions', 'spend'] %}{{ loop.index0 }}:{{ c }}{{ ', ' if not loop.last }}{% endfor %}
 ```
-renders as `0:a, 1:b, 2:c`.
+renders as `0:clicks, 1:impressions, 2:spend` (the columns of an ad-campaign table such as Google Ads reports).
+
 
 Inside a loop, `loop` tells you where you are:
 
@@ -396,9 +410,9 @@ Loop over a dict with `for key, value in d.items()`, and over a list of pairs by
 A loop can **filter** its items; `loop.index0` then counts only the kept ones:
 
 ```jinja
-{% for c in ['a', 'b', 'c'] if c != 'b' %}{{ loop.index0 }}:{{ c }} {% endfor %}
+{% for c in ['clicks', 'impressions', 'spend'] if c != 'impressions' %}{{ loop.index0 }}:{{ c }} {% endfor %}
 ```
-renders as `0:a 1:c `.
+renders as `0:clicks 1:spend `.
 
 ### 2.6 Whitespace control: the `-` in `{%-` and `-%}`
 
@@ -480,9 +494,9 @@ renders as `0`. A `set` inside a loop creates a new variable that lives only for
 renders as `6`; a `namespace` is an object whose attributes survive the loop. Or **mutate** a list or dict created outside the loop, which is the usual dbt way:
 
 ```jinja
-{% set cols = [] %}{% for m in ['bet', 'payout'] %}{% do cols.append(m ~ '_avg') %}{% endfor %}{{ cols | join(', ') }}
+{% set cols = [] %}{% for m in ['fare', 'tip'] %}{% do cols.append(m ~ '_avg') %}{% endfor %}{{ cols | join(', ') }}
 ```
-renders as `bet_avg, payout_avg`. `do` (a Jinja extension dbt turns on) runs an expression and throws away its result; `{{ cols.append(x) }}` would print `None` into the SQL.
+renders as `fare_avg, tip_avg`. `do` (a Jinja extension dbt turns on) runs an expression and throws away its result; `{{ cols.append(x) }}` would print `None` into the SQL.
 
 ### 2.9 Macros: functions that print text
 
@@ -490,11 +504,11 @@ renders as `bet_avg, payout_avg`. `do` (a Jinja extension dbt turns on) runs an 
 {% macro pct(col, q=0.5) -%}
 PERCENTILE_CONT({{ q }}) WITHIN GROUP (ORDER BY {{ col }})
 {%- endmacro %}
-{{ pct('payout') }} | {{ pct('payout', q=0.25) }}
+{{ pct('delivery_minutes') }} | {{ pct('delivery_minutes', q=0.9) }}
 ```
-renders as `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY payout) | PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY payout)`.
+renders as `PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY delivery_minutes) | PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY delivery_minutes)`: the median and the 90th percentile of package delivery time, the kind of number an e-commerce company such as Amazon tracks against its delivery promise.
 
-A macro has positional arguments, defaults (`q=0.5`) and keyword calls (`q=0.25`), like a Python function. The important difference: **a macro's result is the text it rendered**, always a string. With `{% macro two() %}2{% endmacro %}{% set v = two() %}`, `{{ v ~ v }}` renders as `22`, not `4`, and `v is string` is `True`. To hand back a list or a number you need dbt's `return()` (Section 3.4).
+A macro has positional arguments, defaults (`q=0.5`) and keyword calls (`q=0.9`), like a Python function. The important difference: **a macro's result is the text it rendered**, always a string. With `{% macro two() %}2{% endmacro %}{% set v = two() %}`, `{{ v ~ v }}` renders as `22`, not `4`, and `v is string` is `True`. To hand back a list or a number you need dbt's `return()` (Section 3.4).
 
 Macros are also how you read most of a dbt project: every `{{ something(...) }}` that is not a built-in (Chapter 3) is a macro defined in some `macros/*.sql` file, in this project or in a package.
 
@@ -504,9 +518,9 @@ dbt puts extra variables and functions into Jinja's context (the set of names a 
 
 | Name | What it is | Example → compiled |
 | --- | --- | --- |
-| `ref('model')` | The table/view of another model; also records a DAG edge | `{{ ref('stg_bets') }}` → `"toy"."main"."stg_bets"` |
-| `source('src', 'table')` | A table dbt did not build, declared in a `sources:` YAML | `{{ source('raw', 'raw_bets') }}` → `"toy"."main"."raw_bets"` |
-| `this` | The table of the model being built (used in incremental filters) | `{{ this }}` → `"toy"."main"."fct_bets"` |
+| `ref('model')` | The table/view of another model; also records a DAG edge | `{{ ref('stg_trips') }}` → `"toy_rides"."main"."stg_trips"` |
+| `source('src', 'table')` | A table dbt did not build, declared in a `sources:` YAML | `{{ source('raw', 'raw_trips') }}` → `"toy_rides"."main"."raw_trips"` |
+| `this` | The table of the model being built (used in incremental filters) | `{{ this }}` → `"toy_rides"."main"."fct_trips"` |
 | `config(...)` | Sets the model's materialization and options (Chapter 4) | prints nothing |
 | `is_incremental()` | True when an incremental model adds to an existing table (Chapter 5) | |
 | `var('name', default)` | A project variable: `--vars` on the command line, else `vars:` in `dbt_project.yml`, else the default | `'{{ var("as_of") }}'` → `'2026-01-02 23:59:59'` |
@@ -523,7 +537,7 @@ dbt puts extra variables and functions into Jinja's context (the set of names a 
 
 ### 3.1 `ref` and `source`: never hard-code a table name
 
-`ref('stg_bets')` does two jobs: it prints the full name of the table in the current target (so the same code writes to a dev schema or a prod schema) and it tells dbt that this model depends on `stg_bets`, so `stg_bets` is built first. A hard-coded `FROM main.stg_bets` would work once but break the DAG order and the dev/prod switch.
+`ref('stg_trips')` does two jobs: it prints the full name of the table in the current target (so the same code writes to a dev schema or a prod schema) and it tells dbt that this model depends on `stg_trips`, so `stg_trips` is built first. A hard-coded `FROM main.stg_trips` would work once but break the DAG order and the dev/prod switch.
 
 `source()` is the same for tables loaded by something else; `models/staging/_sources.yml` declares them:
 
@@ -532,46 +546,46 @@ sources:
   - name: raw                 # the name used in source('raw', ...)
     schema: main              # where the tables really are
     tables:
-      - name: raw_bets
+      - name: raw_trips
 ```
 
 ### 3.2 `config()`
 
 ```jinja
-{{ config(materialized='incremental', unique_key='bet_id') }}
+{{ config(materialized='incremental', unique_key='trip_id') }}
 ```
 
 prints nothing; dbt records the settings during parsing. Chapter 4 lists them.
 
 ### 3.3 `var()`
 
-`stg_bets` keeps only rows loaded by a simulated "now":
+`stg_trips` keeps only rows loaded by a simulated "now":
 
 ```sql
 WHERE loaded_at <= '{{ var("as_of") }}'
 ```
 
-With the default in `dbt_project.yml` (`as_of: '2026-01-02 23:59:59'`) this compiles to `WHERE loaded_at <= '2026-01-02 23:59:59'`; `dbt run --vars '{as_of: "2026-01-01 23:59:59"}'` overrides it. A var can hold any YAML value, including a list of dicts (`ab_rules`, Section 6.4). Without a default, a missing var is a compile error.
+With the default in `dbt_project.yml` (`as_of: '2026-01-02 23:59:59'`) this compiles to `WHERE loaded_at <= '2026-01-02 23:59:59'`; `dbt run --vars '{as_of: "2026-01-01 23:59:59"}'` overrides it. A var can hold any YAML value, including a list of dicts (`experiment_rules`, Section 6.4). Without a default, a missing var is a compile error.
 
 ### 3.4 `return()`: macros that hand back values
 
 ```jinja
-{% macro bet_metrics() %}
+{% macro trip_metrics() %}
     {{ return([
-        ('bet_amount', 'bet_amount'),
-        ('payout', 'payout'),
-        ('profit', 'profit'),
-        ('rtp', 'rtp'),
-        ('delta_t_seconds', 'delta_t_seconds'),
+        ('fare', 'fare'),
+        ('tip', 'tip'),
+        ('total', 'total'),
+        ('tip_rate', 'tip_rate'),
+        ('gap_seconds', 'gap_seconds'),
     ]) }}
 {% endmacro %}
 ```
 
-`{% set metrics = bet_metrics() %}` now gives a real list of 5 tuples, not text. Projects use such macros as **configuration**: one place that lists metrics, games, thresholds, read by several models. A macro can call another config macro and transform the result:
+`{% set metrics = trip_metrics() %}` now gives a real list of 5 tuples, not text. Projects use such macros as **configuration**: one place that lists metrics, product categories, cities or thresholds, read by several models. A macro can call another config macro and transform the result:
 
 ```jinja
 {% macro money_metrics() %}
-    {{ return(bet_metrics() | rejectattr(0, 'equalto', 'delta_t_seconds') | list) }}
+    {{ return(trip_metrics() | rejectattr(0, 'equalto', 'gap_seconds') | list) }}
 {% endmacro %}
 ```
 
@@ -595,7 +609,7 @@ Both belong to incremental models; Chapter 5 is about them.
 {% endmacro %}
 ```
 
-`dbt run-operation row_count --args '{model_name: fct_bets}'` prints `fct_bets has 8 rows`.
+`dbt run-operation row_count --args '{model_name: fct_trips}'` prints `fct_trips has 8 rows`.
 
 `run_query` returns an agate table (a small table object from the `agate` Python library): `.columns[0].values()[0]` is "first column, first row"; `.rows` gives rows. The `{% if execute %}` guard matters: during parsing (Section 1.5) there is no database, and the result would be `None`. Real projects use this for **watermarks** (the newest timestamp already loaded), Section 5.6.
 
@@ -618,18 +632,18 @@ One `.sql` file under `models/` = one model = one table or view, named after the
 
 CTE (common table expression) is a named subquery: the `WITH name AS (...)` blocks.
 
-`int_bet_outcomes` is ephemeral. In the compiled `fct_bets` it appears as a CTE named `__dbt__cte__int_bet_outcomes`:
+`int_trip_amounts` is ephemeral. In the compiled `fct_trips` it appears as a CTE named `__dbt__cte__int_trip_amounts`:
 
 ```sql
-with __dbt__cte__int_bet_outcomes as (
+with __dbt__cte__int_trip_amounts as (
 SELECT
     *,
-    payout - bet_amount AS profit,
-    (payout) / NULLIF(bet_amount, 0) AS rtp,
-    CASE WHEN payout > bet_amount THEN 1 ELSE 0 END AS is_win
-FROM "toy"."main"."stg_bets"
+    fare + tip AS total,
+    (tip) / NULLIF(fare, 0) AS tip_rate,
+    CASE WHEN tip > 0 THEN 1 ELSE 0 END AS has_tip
+FROM "toy_rides"."main"."stg_trips"
 ) SELECT *
-FROM __dbt__cte__int_bet_outcomes
+FROM __dbt__cte__int_trip_amounts
 ```
 
 ### 4.2 Where a config can be set, and which one wins
@@ -639,7 +653,7 @@ From weakest to strongest:
 1. `dbt_project.yml`, by folder; the `+` marks a config (not a sub-folder name):
    ```yaml
    models:
-     toy_bets:
+     toy_rides:
        staging:
          +materialized: view
        marts:
@@ -649,7 +663,7 @@ From weakest to strongest:
 2. A `config:` block for the model in a properties YAML (`_marts.yml`).
 3. `{{ config(...) }}` at the top of the model file. **This wins.**
 
-So `fct_bets` is in `marts/` (default `table`) but its own `config(materialized='incremental')` makes it incremental.
+So `fct_trips` is in `marts/` (default `table`) but its own `config(materialized='incremental')` makes it incremental.
 
 ### 4.3 Configs you will see
 
@@ -671,19 +685,19 @@ Unknown keys are passed through to the adapter, which is why each warehouse has 
 
 ### 4.4 Naming layers
 
-Projects usually name models by layer: `stg_` (staging: rename, cast, deduplicate one source), `int_` (intermediate: shared steps), `fct_` (facts: one row per event, such as a bet), `dim_` (dimensions: one row per thing, such as a user), and marts or feature tables built for one consumer. It is a convention, not a rule dbt enforces.
+Projects usually name models by layer: `stg_` (staging: rename, cast, deduplicate one source), `int_` (intermediate: shared steps), `fct_` (facts: one row per event, such as a trip, an order or an ad click), `dim_` (dimensions: one row per thing, such as a driver, a customer or a product), and marts or feature tables built for one consumer. It is a convention, not a rule dbt enforces.
 
 ### 4.5 Selecting what to run
 
 | Selector | Picks |
 | --- | --- |
-| `-s fct_bets` | that model |
-| `-s fct_bets+` | it and everything downstream |
-| `-s +fct_bets` | it and everything upstream |
-| `-s +fct_bets+` | both directions |
+| `-s fct_trips` | that model |
+| `-s fct_trips+` | it and everything downstream |
+| `-s +fct_trips` | it and everything upstream |
+| `-s +fct_trips+` | both directions |
 | `-s tag:daily` | models tagged `daily` |
 | `-s path:models/marts` or `-s marts` | a folder |
-| `-s fct_bets user_day` | either (a space means OR) |
+| `-s fct_trips driver_day` | either (a space means OR) |
 | `-s "tag:daily,marts"` | both (a comma means AND) |
 | `--exclude tag:no_full_refresh` | minus these |
 
@@ -691,17 +705,17 @@ Projects usually name models by layer: `stg_` (staging: rename, cast, deduplicat
 
 ## Chapter 5. Incremental models in depth
 
-A `table` model recomputes everything each run. For a billion-row bet table that is too slow, so an **incremental** model computes only the new part and adds it to the table that already exists.
+A `table` model recomputes everything each run. For a table with billions of rows (every trip a ride-hailing company ever served, every order of an online store) that is too slow, so an **incremental** model computes only the new part and adds it to the table that already exists.
 
 ### 5.1 The pattern
 
-`models/marts/fct_bets.sql`:
+`models/marts/fct_trips.sql`:
 
 ```jinja
 {{
     config(
         materialized='incremental',
-        unique_key='bet_id',
+        unique_key='trip_id',
         incremental_strategy='delete+insert',
         on_schema_change='append_new_columns',
         tags=['daily']
@@ -709,7 +723,7 @@ A `table` model recomputes everything each run. For a billion-row bet table that
 }}
 
 SELECT *
-FROM {{ ref('int_bet_outcomes') }}
+FROM {{ ref('int_trip_amounts') }}
 {% if is_incremental() %}
 -- only rows that arrived after the newest row already in this table
 WHERE loaded_at > (SELECT MAX(loaded_at) FROM {{ this }})
@@ -720,47 +734,49 @@ WHERE loaded_at > (SELECT MAX(loaded_at) FROM {{ this }})
 
 | Run | `is_incremental()` | Compiled `SELECT` | dbt then |
 | --- | --- | --- | --- |
-| First run, or `--full-refresh` | false | everything | `CREATE TABLE fct_bets AS <select>` |
+| First run, or `--full-refresh` | false | everything | `CREATE TABLE fct_trips AS <select>` |
 | Later runs | true | only `loaded_at > MAX(loaded_at)` of the table | writes the result into the table with the strategy |
 
 ### 5.2 Walking through two runs
 
-**Run 1**, as of Jan 1 (`dbt run --vars '{as_of: "2026-01-01 23:59:59"}'`). The table does not exist, so the whole `SELECT` runs. `fct_bets`:
+**Run 1**, as of Jan 1 (`dbt run --vars '{as_of: "2026-01-01 23:59:59"}'`). The table does not exist, so the whole `SELECT` runs. `fct_trips`:
 
-| bet_id | user_id | ab_group | bet_amount | payout | status | profit | rtp | loaded_at |
+| trip_id | driver_id | experiment_group | fare | tip | status | total | tip_rate | loaded_at |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 101 | A | 10 | 0 | settled | -10 | 0.0 | 01-01 23:00 |
-| 2 | 101 | A | 10 | 25 | settled | 15 | 2.5 | 01-01 23:00 |
-| 3 | 101 | A | 20 | 0 | settled | -20 | 0.0 | 01-01 23:00 |
-| 4 | 102 | B | 5 | 0 | **pending** | -5 | 0.0 | 01-01 23:00 |
-| 5 | 102 | B | 5 | 15 | settled | 10 | 3.0 | 01-01 23:00 |
+| 1 | 101 | A | 12 | 0 | completed | 12 | 0.0 | 01-01 23:00 |
+| 2 | 101 | A | 25 | 5 | completed | 30 | 0.2 | 01-01 23:00 |
+| 3 | 101 | A | 18 | 0 | completed | 18 | 0.0 | 01-01 23:00 |
+| 4 | 102 | B | 30 | **0** | completed | 30 | 0.0 | 01-01 23:00 |
+| 5 | 102 | B | 0 | 0 | cancelled | 0 | NULL | 01-01 23:00 |
 
-**Run 2**, as of Jan 2 (`dbt run`). Now `is_incremental()` is true, `MAX(loaded_at)` in the table is `01-01 23:00`, and the `SELECT` returns the four rows loaded on Jan 2: bets 4 (new version), 6, 7, 8. dbt writes them into a temporary table and runs (from `target/run/.../fct_bets.sql`, shortened):
+**Run 2**, as of Jan 2 (`dbt run`). Now `is_incremental()` is true, `MAX(loaded_at)` in the table is `01-01 23:00`, and the `SELECT` returns the four rows loaded on Jan 2: trips 4 (new version, with the tip), 6, 7, 8. dbt writes them into a temporary table and runs (from `target/run/.../fct_trips.sql`, shortened):
 
 ```sql
-delete from "toy"."main"."fct_bets"
-where (bet_id) in (select (bet_id) from "fct_bets__dbt_tmp...");
+delete from "toy_rides"."main"."fct_trips"
+where (trip_id) in (select (trip_id) from "fct_trips__dbt_tmp...");
 
-insert into "toy"."main"."fct_bets" ("bet_id", "user_id", ...)
-(select "bet_id", "user_id", ... from "fct_bets__dbt_tmp...");
+insert into "toy_rides"."main"."fct_trips" ("trip_id", "driver_id", ...)
+(select "trip_id", "driver_id", ... from "fct_trips__dbt_tmp...");
 ```
 
-The old version of bet 4 is deleted (its `bet_id` is in the new batch) and the new one inserted:
+The old version of trip 4 is deleted (its `trip_id` is in the new batch) and the new one inserted:
 
-| bet_id | user_id | ab_group | bet_amount | payout | status | profit | rtp | loaded_at |
+| trip_id | driver_id | experiment_group | fare | tip | status | total | tip_rate | loaded_at |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 101 | A | 10 | 0 | settled | -10 | 0.0 | 01-01 23:00 |
-| 2 | 101 | A | 10 | 25 | settled | 15 | 2.5 | 01-01 23:00 |
-| 3 | 101 | A | 20 | 0 | settled | -20 | 0.0 | 01-01 23:00 |
-| 4 | 102 | B | 5 | **40** | **settled** | 35 | 8.0 | **01-02 23:00** |
-| 5 | 102 | B | 5 | 15 | settled | 10 | 3.0 | 01-01 23:00 |
-| 6 | 101 | A | 10 | 10 | settled | 0 | 1.0 | 01-02 23:00 |
-| 7 | 103 | holdout | 50 | 0 | settled | -50 | 0.0 | 01-02 23:00 |
-| 8 | 103 | holdout | 50 | 120 | settled | 70 | 2.4 | 01-02 23:00 |
+| 1 | 101 | A | 12 | 0 | completed | 12 | 0.0 | 01-01 23:00 |
+| 2 | 101 | A | 25 | 5 | completed | 30 | 0.2 | 01-01 23:00 |
+| 3 | 101 | A | 18 | 0 | completed | 18 | 0.0 | 01-01 23:00 |
+| 4 | 102 | B | 30 | **6** | completed | **36** | **0.2** | **01-02 23:00** |
+| 5 | 102 | B | 0 | 0 | cancelled | 0 | NULL | 01-01 23:00 |
+| 6 | 101 | A | 15 | 3 | completed | 18 | 0.2 | 01-02 23:00 |
+| 7 | 103 | holdout | 40 | 0 | completed | 40 | 0.0 | 01-02 23:00 |
+| 8 | 103 | holdout | 22 | 4 | completed | 26 | 0.18 | 01-02 23:00 |
 
-This is the result a full rebuild gives too (`test_toy_bets.py` checks that): the goal of every incremental model is "same table as a full refresh, for less work".
+This is the result a full rebuild gives too (`test_toy_rides.py` checks that): the goal of every incremental model is "same table as a full refresh, for less work".
 
-Without `unique_key`, the strategy would only append, and bet 4 would appear twice.
+Without `unique_key`, the strategy would only append, and trip 4 would appear twice: the driver's earnings for Jan 1 would count the trip twice.
+
+The same shape appears wherever a record changes after its first load: an e-commerce order that is refunded a week later, an ad click that a fraud filter marks invalid the next day, a payment that moves from `authorized` to `captured`. In each case the source sends the record again with a newer `loaded_at` (or `updated_at`), and the incremental model replaces the old version by its key.
 
 ### 5.3 Strategies
 
@@ -771,7 +787,7 @@ Without `unique_key`, the strategy would only append, and bet 4 would appear twi
 | `merge` | `MERGE`: update matching rows, insert the others | yes | Redshift, Snowflake, BigQuery, Databricks; `merge_update_columns=[...]` limits which columns an update changes |
 | `insert_overwrite` | replace whole partitions | partitions | BigQuery, Spark |
 
-The default strategy depends on the adapter, so well-written models set it explicitly. With `merge` and `merge_update_columns=['status', 'payout']`, a re-delivered bet would only refresh those two columns and keep the others as first written.
+The default strategy depends on the adapter, so well-written models set it explicitly. With `merge` and `merge_update_columns=['status', 'tip']`, a re-delivered trip would only refresh those two columns and keep the others as first written.
 
 ### 5.4 The lookback window: data that arrives late or changes
 
@@ -783,7 +799,7 @@ WHERE loaded_at > (SELECT MAX(loaded_at) - INTERVAL '30 minutes' FROM {{ this }}
 {% endif %}
 ```
 
-Rows inside the margin come again; `delete+insert` or `merge` replaces them instead of duplicating them. The same idea at day scale: "re-write the last 3 days on every run" with `unique_key=['user_id', 'bet_date']`.
+Rows inside the margin come again; `delete+insert` or `merge` replaces them instead of duplicating them. The same idea at day scale: "re-write the last 3 days on every run" with `unique_key=['driver_id', 'trip_date']`.
 
 ### 5.5 When the columns change: `on_schema_change`
 
@@ -821,15 +837,15 @@ A literal lets the warehouse skip blocks of the source table (pruning), which a 
 
 ### 5.7 The window-function trap
 
-`user_day` computes `delta_t_seconds` (seconds since the user's previous bet) with `LAG(created_at) OVER (PARTITION BY user_id, bet_date ORDER BY created_at)`. That is why it is a **table**: if it were incremental and read only the new rows, the first new bet of each user would have no previous row in the batch and get `NULL` instead of the real gap. Incremental models with `LAG`, running totals or sessions must read extra **context** rows (for example the previous 14 days) and then write only the rows they own, or they compute different numbers than a full refresh.
+`driver_day` computes `gap_seconds` (seconds since the driver's previous trip started, a simple measure of idle time between rides) with `LAG(started_at) OVER (PARTITION BY driver_id, trip_date ORDER BY started_at)`. That is why it is a **table**: if it were incremental and read only the new rows, the first new trip of each driver would have no previous row in the batch and get `NULL` instead of the real gap. The same trap hits "days since the customer's last order" in e-commerce and session building on app events (a new session starts after 30 minutes of inactivity). Incremental models with `LAG`, running totals or sessions must read extra **context** rows (for example the previous 14 days) and then write only the rows they own, or they compute different numbers than a full refresh.
 
 ### 5.8 Full refresh
 
-`dbt run --full-refresh -s fct_bets` drops and rebuilds the table from the whole `SELECT`. Use it after a logic change or a backfill. For huge tables, projects protect themselves with `full_refresh=false` in the config, or with a tag such as `no_full_refresh` that their scheduler excludes.
+`dbt run --full-refresh -s fct_trips` drops and rebuilds the table from the whole `SELECT`. Use it after a logic change or a backfill. For huge tables, projects protect themselves with `full_refresh=false` in the config, or with a tag such as `no_full_refresh` that their scheduler excludes.
 
 ## Chapter 6. Macros: five patterns you will meet
 
-All macros of a project, and of its installed packages, are visible everywhere: in models, in other macros, in YAML tests. A macro from a package is called with its package name: `dbt_utils.date_spine(...)`. To find a macro, search for its definition: `grep -rn "macro ab_group_case" macros/ dbt_packages/`.
+All macros of a project, and of its installed packages, are visible everywhere: in models, in other macros, in YAML tests. A macro from a package is called with its package name: `dbt_utils.date_spine(...)`. To find a macro, search for its definition: `grep -rn "macro experiment_group_case" macros/ dbt_packages/`.
 
 ### 6.1 Snippet macro: a piece of SQL with holes
 
@@ -841,15 +857,17 @@ All macros of a project, and of its installed packages, are visible everywhere: 
 {%- endmacro %}
 ```
 
-`{{ safe_divide('payout', 'bet_amount') }} AS rtp` compiles to `(payout) / NULLIF(bet_amount, 0) AS rtp`. The arguments are **SQL text**, not values: `'payout'` is the column name pasted into the query. The parentheses around `{{ a }}` keep `safe_divide('a + b', 'c')` correct.
+`{{ safe_divide('tip', 'fare') }} AS tip_rate` compiles to `(tip) / NULLIF(fare, 0) AS tip_rate`. The arguments are **SQL text**, not values: `'tip'` is the column name pasted into the query. The parentheses around `{{ a }}` keep `safe_divide('fare + tip', 'fare')` correct.
+
+Trip 5, a free cancellation, has fare 0, so its `tip_rate` is `NULL` instead of a division-by-zero error that would stop the whole run. The same macro is the standard way to write click-through rate (`safe_divide('clicks', 'impressions')`: an ad shown zero times) or conversion rate (`safe_divide('orders', 'visits')`: a product page nobody opened).
 
 ### 6.2 Config macro: `return` a value
 
-`bet_metrics()` (Section 3.4) lists the metrics of `user_day` as `(alias, expression)` pairs. Nothing else in the project names those metrics, so adding a pair adds columns.
+`trip_metrics()` (Section 3.4) lists the metrics of `driver_day` as `(alias, expression)` pairs. Nothing else in the project names those metrics, so adding a pair adds columns.
 
 ### 6.3 Generator macro: SQL from a loop
 
-`macros/bet_metrics.sql` also has:
+`macros/trip_metrics.sql` also has:
 
 ```jinja
 {% macro metric_stats(alias, expr) -%}
@@ -860,50 +878,52 @@ All macros of a project, and of its installed packages, are visible everywhere: 
 {%- endmacro %}
 ```
 
-and `models/marts/user_day.sql` loops over the config:
+and `models/marts/driver_day.sql` loops over the config:
 
 ```jinja
-{%- set metrics = bet_metrics() -%}
+{%- set metrics = trip_metrics() -%}
 ...
 SELECT
-    user_id,
-    bet_date,
-    COUNT(*) AS n_bets,
+    driver_id,
+    trip_date,
+    COUNT(*) AS n_trips,
 {%- for alias, expr in metrics %}
     {{ metric_stats(alias, expr) }}{{ ',' if not loop.last }}
 {%- endfor %}
-FROM bets
-GROUP BY user_id, bet_date
+FROM trips
+GROUP BY driver_id, trip_date
 ```
 
 which compiles to 20 statistic columns:
 
 ```sql
 SELECT
-    user_id,
-    bet_date,
-    COUNT(*) AS n_bets,
-    AVG(bet_amount) AS bet_amount_avg,
-    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY bet_amount) AS bet_amount_median,
-    MIN(bet_amount) AS bet_amount_min,
-    MAX(bet_amount) AS bet_amount_max,
-    AVG(payout) AS payout_avg,
+    driver_id,
+    trip_date,
+    COUNT(*) AS n_trips,
+    AVG(fare) AS fare_avg,
+    PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY fare) AS fare_median,
+    MIN(fare) AS fare_min,
+    MAX(fare) AS fare_max,
+    AVG(tip) AS tip_avg,
     ...
-    MAX(delta_t_seconds) AS delta_t_seconds_max
-FROM bets
-GROUP BY user_id, bet_date
+    MAX(gap_seconds) AS gap_seconds_max
+FROM trips
+GROUP BY driver_id, trip_date
 ```
 
-Check one row by hand. User 101 on Jan 1 bet at 09:00, 09:01 and 09:03, so `delta_t_seconds` is `NULL, 60, 120`: average 90, median 90, max 120. The table:
+Check one row by hand. Driver 101 on Jan 1 started trips at 09:00, 09:30 and 10:10, so `gap_seconds` is `NULL, 1800, 2400`: average 2100, median 2100, max 2400. The table (some columns):
 
-| user_id | bet_date | n_bets | bet_amount_avg | payout_median | profit_min | profit_max | delta_t_seconds_avg | delta_t_seconds_max |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 101 | 2026-01-01 | 3 | 13.33 | 0 | -20 | 15 | 90 | 120 |
-| 101 | 2026-01-02 | 1 | 10 | 10 | 0 | 0 | NULL | NULL |
-| 102 | 2026-01-01 | 2 | 5 | 27.5 | 10 | 35 | 120 | 120 |
-| 103 | 2026-01-02 | 2 | 50 | 60 | -50 | 70 | 300 | 300 |
+| driver_id | trip_date | n_trips | fare_avg | tip_median | total_min | total_max | tip_rate_avg | gap_seconds_avg | gap_seconds_max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 101 | 2026-01-01 | 3 | 18.33 | 0 | 12 | 30 | 0.067 | 2100 | 2400 |
+| 101 | 2026-01-02 | 1 | 15 | 3 | 18 | 18 | 0.2 | NULL | NULL |
+| 102 | 2026-01-01 | 2 | 15 | 3 | 0 | 36 | 0.2 | 2700 | 2700 |
+| 103 | 2026-01-02 | 2 | 31 | 2 | 26 | 40 | 0.091 | 3000 | 3000 |
 
-Aggregates skip `NULL`s, so a user's first bet of the day does not count in the `delta_t` statistics, and a user with one bet gets `NULL`.
+Aggregates skip `NULL`s. So a driver's first trip of the day does not count in the `gap_seconds` statistics, and a driver with one trip gets `NULL`. Driver 102's `tip_rate_avg` is 0.2, not 0.1, because the free cancellation's `NULL` rate is left out of the average: decide on purpose whether that is the number you want (here it means "tip rate of paid trips").
+
+The same config + generator pair builds any "many statistics per entity and period" table: daily engagement per user at a social app such as Meta (sessions, posts, minutes), weekly sales per store at a retailer such as Home Depot (revenue, units, basket size), or a machine-learning feature table. One list decides the columns; the loop writes them.
 
 **A warehouse twist.** DuckDB lets one `SELECT` hold several `PERCENTILE_CONT` with different `ORDER BY`s. Redshift does not: all sort-based aggregates (`PERCENTILE_CONT`, `MEDIAN`, `LISTAGG`) in one query must order by the same thing. Redshift projects therefore generate **one CTE per metric** (each with its own `GROUP BY` and percentiles) plus a loop of `LEFT JOIN`s, from the same config list. When you see a loop that writes `pct_<alias> AS (...)` CTEs and another that joins them, this is why.
 
@@ -911,8 +931,8 @@ Another common generator style builds a list of `(name, expression)` pairs first
 
 ```jinja
 {%- set cols = [] -%}
-{%- do cols.append(('bet_amount_avg', 'a.bet_amount_avg')) -%}
-{%- do cols.append(('bet_amount_cv', 'a.bet_amount_std / NULLIF(a.bet_amount_avg, 0)')) -%}
+{%- do cols.append(('fare_avg', 'a.fare_avg')) -%}
+{%- do cols.append(('fare_cv', 'a.fare_std / NULLIF(a.fare_avg, 0)')) -%}
 {%- for name, expr in cols %}
     {{ expr }} AS {{ name }},
 {%- endfor %}
@@ -922,21 +942,21 @@ Read it as a table of output columns; the loop at the end just prints them.
 
 ### 6.4 Compiler macro: SQL from YAML rules, with validation
 
-`dbt_project.yml` holds AB-test (experiment group) rules as data:
+Large tech companies (Google, Meta, Uber, Amazon) run thousands of A/B tests: each user, driver or customer is put in a group, and every metric is compared between groups. Assignment is usually a hash of the ID modulo some number of buckets; a **holdout** group is kept out of all changes to measure their total effect. Analytics tables need the same assignment as SQL. In the toy project, drivers take part in a test of a new pay screen, and `dbt_project.yml` holds the rules as data:
 
 ```yaml
 vars:
-  ab_rules:
+  experiment_rules:
     - {label: holdout, op: in, values: [103]}
     - {label: A, op: last_digit_in, values: [1, 3, 5, 7, 9]}
     - {label: B, op: last_digit_in, values: [0, 2, 4, 6, 8]}
 ```
 
-`macros/ab_group_case.sql` turns them into one SQL `CASE`, first match wins:
+`macros/experiment_group_case.sql` turns them into one SQL `CASE`, first match wins:
 
 ```jinja
-{% macro ab_group_case(column) -%}
-{%- set rules = var('ab_rules') -%}
+{% macro experiment_group_case(column) -%}
+{%- set rules = var('experiment_rules') -%}
 CASE
 {%- for rule in rules %}
     {%- if rule['op'] == 'in' -%}
@@ -944,7 +964,7 @@ CASE
     {%- elif rule['op'] == 'last_digit_in' -%}
         {%- set condition = column ~ ' % 10 IN (' ~ rule['values'] | join(', ') ~ ')' -%}
     {%- else -%}
-        {{ exceptions.raise_compiler_error("ab_rules[" ~ loop.index0 ~ "]: unknown op '" ~ rule['op'] ~ "'") }}
+        {{ exceptions.raise_compiler_error("experiment_rules[" ~ loop.index0 ~ "]: unknown op '" ~ rule['op'] ~ "'") }}
     {%- endif %}
     WHEN {{ condition }} THEN '{{ rule["label"] }}'
 {%- endfor %}
@@ -952,17 +972,17 @@ END
 {%- endmacro %}
 ```
 
-`{{ ab_group_case('user_id') }}` compiles to:
+`{{ experiment_group_case('driver_id') }}` compiles to:
 
 ```sql
 CASE
-    WHEN user_id IN (103) THEN 'holdout'
-    WHEN user_id % 10 IN (1, 3, 5, 7, 9) THEN 'A'
-    WHEN user_id % 10 IN (0, 2, 4, 6, 8) THEN 'B'
+    WHEN driver_id IN (103) THEN 'holdout'
+    WHEN driver_id % 10 IN (1, 3, 5, 7, 9) THEN 'A'
+    WHEN driver_id % 10 IN (0, 2, 4, 6, 8) THEN 'B'
 END
 ```
 
-so user 101 → A, 102 → B, 103 → holdout (it is odd, but the `holdout` rule comes first). Points to notice:
+so driver 101 → A, 102 → B, 103 → holdout (it is odd, but the `holdout` rule comes first). Points to notice:
 
 - `set condition` inside the loop is fine here: it is set and used in the same loop step (Section 2.8).
 - Operator precedence: `rule['values'] | join(', ')` is evaluated before `~`, because filters bind tighter than operators.
@@ -983,30 +1003,30 @@ A dbt test is a `SELECT` that returns the **bad rows**. Zero rows = pass.
 
 ```yaml
 models:
-  - name: fct_bets
+  - name: fct_trips
     columns:
-      - name: bet_id
+      - name: trip_id
         tests: [unique, not_null]
       - name: status
         tests:
           - accepted_values:
-              values: ['pending', 'settled']
-      - name: user_id
+              values: ['completed', 'cancelled']
+      - name: driver_id
         tests:
-          - relationships:          # every user_id exists in the users seed
-              to: ref('users')
-              field: user_id
-      - name: bet_amount
+          - relationships:          # every driver_id exists in the drivers seed
+              to: ref('drivers')
+              field: driver_id
+      - name: fare
         tests: [non_negative]       # our own generic test
-      - name: ab_group
+      - name: experiment_group
         tests:
           - not_null:
               config:
                 severity: warn      # report it, but do not fail the build
-  - name: user_day
+  - name: driver_day
     tests:
       - unique_columns:             # a model-level test with an argument
-          columns: [user_id, bet_date]
+          columns: [driver_id, trip_date]
 ```
 
 The four built-ins are `unique`, `not_null`, `accepted_values` and `relationships`. From dbt 1.8 the key is `data_tests:` (`tests:` still works; Chapter 12).
@@ -1026,23 +1046,25 @@ HAVING COUNT(*) > 1
 
 ### 7.3 Singular tests
 
-A `.sql` file in `tests/` is a one-off test. `tests/assert_payout_at_most_10x.sql`:
+A `.sql` file in `tests/` is a one-off test. `tests/assert_tip_at_most_fare.sql`:
 
 ```sql
-SELECT bet_id, bet_amount, payout
-FROM {{ ref('fct_bets') }}
-WHERE payout > 10 * bet_amount
+SELECT trip_id, fare, tip
+FROM {{ ref('fct_trips') }}
+WHERE tip > fare
 ```
+
+Singular tests encode business rules that no generic test covers. Other typical ones: an order whose line items do not add up to the order total; a refund larger than the payment; a store with negative stock; a fare above the city's surge cap.
 
 `dbt test` on the toy project: `PASS=8 WARN=0 ERROR=0`.
 
 ### 7.4 Test configs
 
-`severity: warn` (report, do not fail), `error_if` / `warn_if` (thresholds such as `">10"`), `where: "bet_date >= '2026-01-01'"` (test a slice), `store_failures: true` (save the bad rows to a table to inspect). In `dbt build`, a model's tests run right after it, and a failing (error) test skips the models downstream.
+`severity: warn` (report, do not fail), `error_if` / `warn_if` (thresholds such as `">10"`), `where: "trip_date >= '2026-01-01'"` (test a slice), `store_failures: true` (save the bad rows to a table to inspect). In `dbt build`, a model's tests run right after it, and a failing (error) test skips the models downstream.
 
 ### 7.5 Packages of tests
 
-`dbt_utils` adds `unique_combination_of_columns`, `expression_is_true`, `accepted_range`, `recency` and more; use them like the built-ins: `dbt_utils.expression_is_true: {expression: "payout >= 0"}`.
+`dbt_utils` adds `unique_combination_of_columns`, `expression_is_true`, `accepted_range`, `recency` and more; use them like the built-ins: `dbt_utils.expression_is_true: {expression: "tip >= 0"}`.
 
 ### 7.6 Documentation
 
@@ -1056,24 +1078,24 @@ Declared in YAML (Section 3.1). Sources can also carry tests and a `freshness:` 
 
 ### 8.2 Seeds
 
-Small CSV files in `seeds/`, loaded by `dbt seed` and used with `ref('users')`. For lookup tables and test data, not for real data loads. Column types can be fixed in `dbt_project.yml` (`+column_types`), as the toy project does for its timestamps.
+Small CSV files in `seeds/`, loaded by `dbt seed` and used with `ref('drivers')`. For lookup tables and test data, not for real data loads. Column types can be fixed in `dbt_project.yml` (`+column_types`), as the toy project does for its timestamps.
 
 ### 8.3 Snapshots
 
-A model shows the data as it is **now**. A snapshot records how rows **change** over time: each version of a row is kept, with the period it was valid. (The data-warehouse name is a type-2 slowly changing dimension, SCD2.) `snapshots/bets_snapshot.sql`:
+A model shows the data as it is **now**. A snapshot records how rows **change** over time: each version of a row is kept, with the period it was valid. (The data-warehouse name is a type-2 slowly changing dimension, SCD2.) `snapshots/trips_snapshot.sql`:
 
 ```jinja
-{% snapshot bets_snapshot %}
+{% snapshot trips_snapshot %}
 {{
     config(
         target_schema='snapshots',
-        unique_key='bet_id',
+        unique_key='trip_id',
         strategy='timestamp',
         updated_at='loaded_at'
     )
 }}
-SELECT bet_id, user_id, payout, status, loaded_at
-FROM {{ ref('stg_bets') }}
+SELECT trip_id, driver_id, fare, tip, status, loaded_at
+FROM {{ ref('stg_trips') }}
 {% endsnapshot %}
 ```
 
@@ -1087,18 +1109,20 @@ Each `dbt snapshot` compares the `SELECT` with the snapshot table, row by row on
 
 The two strategies differ in how "changed" is decided: `timestamp` compares the `updated_at` column; `check` compares the columns listed in `check_cols` (or `'all'`), for sources without a reliable timestamp. A current row is the one with `dbt_valid_to IS NULL`. dbt also adds `dbt_scd_id` (a hash that identifies the version) and `dbt_updated_at`.
 
-After the lab's two snapshots (Section 1.6, Steps 5 and 7), bet 4 has two rows:
+After the lab's two snapshots (Section 1.6, Steps 5 and 7), trip 4 has two rows:
 
-| bet_id | payout | status | dbt_valid_from | dbt_valid_to |
+| trip_id | fare | tip | dbt_valid_from | dbt_valid_to |
 | --- | --- | --- | --- | --- |
-| 4 | 0 | pending | 2026-01-01 23:00 | 2026-01-02 23:00 |
-| 4 | 40 | settled | 2026-01-02 23:00 | NULL |
+| 4 | 30 | 0 | 2026-01-01 23:00 | 2026-01-02 23:00 |
+| 4 | 30 | 6 | 2026-01-02 23:00 | NULL |
+
+The classic use is in retail and e-commerce: a product table in the store's database holds only today's price and stock level. A nightly snapshot of it gives the price history that a question such as "did sales of drills at Home Depot rise after the price cut on March 3?" needs, and the stock history that shows how often a product was out of stock. Customer addresses, loyalty tiers and account statuses are snapshotted for the same reason: the source overwrites them.
 
 Three things to know:
 
 - **A snapshot cannot be rebuilt.** It stores what it saw at each run; a version it never saw (because no snapshot ran in between) is lost. That is why snapshots read sources or light staging views, never heavy logic, and why `--full-refresh` does not apply to them.
-- **It sees what its input shows at run time.** Here the input is the view `stg_bets`, and the view's `as_of` is fixed when the view is built. `dbt snapshot` alone after changing `as_of` sees the old world; rebuild `stg_bets` first (`dbt run`, or `dbt build`, which orders it correctly).
-- **Use it for history you cannot get back.** If the source already keeps every version (as `raw_bets` does here, with `loaded_at`), a model can rebuild the history at any time, and many teams write such history tables as ordinary incremental models instead; a model named `*_scd` is usually one of those.
+- **It sees what its input shows at run time.** Here the input is the view `stg_trips`, and the view's `as_of` is fixed when the view is built. `dbt snapshot` alone after changing `as_of` sees the old world; rebuild `stg_trips` first (`dbt run`, or `dbt build`, which orders it correctly).
+- **Use it for history you cannot get back.** If the source already keeps every version (as `raw_trips` does here, with `loaded_at`), a model can rebuild the history at any time, and many teams write such history tables as ordinary incremental models instead; a model named `*_scd` is usually one of those.
 
 ### 8.4 Hooks
 
@@ -1140,14 +1164,14 @@ When you cannot run `dbt compile` (no warehouse credentials, no installed packag
 import yaml
 from render import Renderer
 
-vars = yaml.safe_load(open("toy_bets/dbt_project.yml"))["vars"]
-r = Renderer("toy_bets/macros", vars=vars)
-r.call("bet_metrics")                         # the list of 5 (alias, expr) tuples
-print(r.call("ab_group_case", "user_id"))     # the CASE of Section 6.4
-print(r.render_file("toy_bets/models/marts/user_day.sql"))
+vars = yaml.safe_load(open("toy_rides/dbt_project.yml"))["vars"]
+r = Renderer("toy_rides/macros", vars=vars)
+r.call("trip_metrics")                                # the list of 5 (alias, expr) tuples
+print(r.call("experiment_group_case", "driver_id"))   # the CASE of Section 6.4
+print(r.render_file("toy_rides/models/marts/driver_day.sql"))
 ```
 
-For this project its output equals dbt's compiled SQL character for character, except that `ref('fct_bets')` prints as `fct_bets` instead of `"toy"."main"."fct_bets"` (`test_toy_bets.py` checks this). It does not know `run_query`, `adapter`, `this` or package macros, so it fits macros that only shape SQL text; projects often test such macros exactly this way, rendering them in Python and comparing column lists.
+For this project its output equals dbt's compiled SQL character for character, except that `ref('fct_trips')` prints as `fct_trips` instead of `"toy_rides"."main"."fct_trips"` (`test_toy_rides.py` checks this). It does not know `run_query`, `adapter`, `this` or package macros, so it fits macros that only shape SQL text; projects often test such macros exactly this way, rendering them in Python and comparing column lists.
 
 ### 9.3 Idioms cheat sheet
 
@@ -1193,7 +1217,7 @@ The toy project runs by hand. In a team, the same commands run on a schedule, ag
 Each person develops against their own schema (a **dev** target such as `dbt_alice`), and the scheduler builds the real tables with a **prod** target. Same code, different `profiles.yml` output: `ref()` prints the schema of the active target, so nobody's experiment overwrites a production table. Code that must differ by environment checks `target.name` (Chapter 3), for example to read only the last 3 days in dev:
 
 ```jinja
-{% if target.name == 'dev' %} WHERE bet_date >= CURRENT_DATE - 3 {% endif %}
+{% if target.name == 'dev' %} WHERE trip_date >= CURRENT_DATE - 3 {% endif %}
 ```
 
 ### 11.2 Scheduling
@@ -1204,7 +1228,7 @@ dbt has no scheduler of its own. An orchestrator (Airflow, Dagster, dbt Cloud, a
 dbt build -s tag:daily --target prod
 ```
 
-Common designs: one task per tag (a daily and an hourly group), or one task per model so that retries and alerts are per table. A tag such as `daily` on `fct_bets` (Section 4.3) is what the scheduler selects on. Remember Step 2 of the lab: the jobs that fill the sources must finish before dbt starts.
+Common designs: one task per tag (a daily and an hourly group), or one task per model so that retries and alerts are per table. A tag such as `daily` on `fct_trips` (Section 4.3) is what the scheduler selects on. Remember Step 2 of the lab: the jobs that fill the sources must finish before dbt starts.
 
 ### 11.3 Artifacts: what dbt leaves in `target/`
 
@@ -1219,26 +1243,26 @@ You can read them like any JSON. After `dbt parse`:
 ```python
 import json
 m = json.load(open("target/manifest.json"))
-m["nodes"]["model.toy_bets.user_day"]["depends_on"]
-# {'macros': ['macro.toy_bets.bet_metrics', 'macro.toy_bets.metric_stats'], 'nodes': ['model.toy_bets.fct_bets']}
+m["nodes"]["model.toy_rides.driver_day"]["depends_on"]
+# {'macros': ['macro.toy_rides.trip_metrics', 'macro.toy_rides.metric_stats'], 'nodes': ['model.toy_rides.fct_trips']}
 ```
 
-Notice that dbt also tracks which **macros** a model uses: changing `bet_metrics` changes `user_day`.
+Notice that dbt also tracks which **macros** a model uses: changing `trip_metrics` changes `driver_day`.
 
 ### 11.4 Slim CI: build only what changed
 
-When a pull request changes one model, rebuilding the whole project to check it is wasteful. dbt compares the project with a saved `manifest.json` from production and selects what differs. Try it in `toy_bets/`:
+When a pull request changes one model, rebuilding the whole project to check it is wasteful. dbt compares the project with a saved `manifest.json` from production and selects what differs. Try it in `toy_rides/`:
 
 ```bash
 dbt parse
 cp -r target prod-state                    # pretend this is the production manifest
 ```
 
-Now edit `models/staging/int_bet_outcomes.sql` and add a column, for example `payout = 0 AS is_loss` after `is_win` (do not forget the comma). Then:
+Now edit `models/staging/int_trip_amounts.sql` and add a column, for example `status = 'cancelled' AS is_cancelled` after `has_tip` (do not forget the comma). Then:
 
 ```bash
-dbt ls -s state:modified --state prod-state                          # toy_bets.staging.int_bet_outcomes
-dbt ls -s state:modified+ --state prod-state --resource-type model   # it, fct_bets and user_day
+dbt ls -s state:modified --state prod-state                          # toy_rides.staging.int_trip_amounts
+dbt ls -s state:modified+ --state prod-state --resource-type model   # it, fct_trips and driver_day
 ```
 
 A CI job runs `dbt build -s state:modified+ --defer --state prod-state`. `--defer` makes every `ref()` to a model that was **not** selected point to the production table instead, so the job does not need to build the unchanged parents. Undo the edit and `rm -r prod-state` when done.
@@ -1267,23 +1291,23 @@ This guide runs dbt 1.7. When you move to a newer version, these are the changes
 | 1.10 | Custom config keys belong under `meta` | Unknown keys in `config()` give deprecation warnings |
 | 1.11 | User-defined functions | SQL functions defined in a `functions/` folder and used with `{{ function('name') }}` |
 
-**A unit test** (1.8+) lives in a properties YAML next to the model. For `user_day` it could look like:
+**A unit test** (1.8+) lives in a properties YAML next to the model. For `driver_day` it could look like:
 
 ```yaml
 unit_tests:
-  - name: user_day_counts_and_gaps
-    model: user_day
+  - name: driver_day_counts_and_gaps
+    model: driver_day
     given:
-      - input: ref('fct_bets')
+      - input: ref('fct_trips')
         rows:
-          - {user_id: 101, bet_date: 2026-01-01, created_at: 2026-01-01 09:00:00, bet_amount: 10, payout: 0}
-          - {user_id: 101, bet_date: 2026-01-01, created_at: 2026-01-01 09:01:00, bet_amount: 20, payout: 50}
+          - {driver_id: 101, trip_date: 2026-01-01, started_at: 2026-01-01 09:00:00, fare: 12, tip: 0}
+          - {driver_id: 101, trip_date: 2026-01-01, started_at: 2026-01-01 09:30:00, fare: 18, tip: 3}
     expect:
       rows:
-        - {user_id: 101, bet_date: 2026-01-01, n_bets: 2, bet_amount_avg: 15, delta_t_seconds_max: 60}
+        - {driver_id: 101, trip_date: 2026-01-01, n_trips: 2, fare_avg: 15, gap_seconds_max: 1800}
 ```
 
-dbt replaces `ref('fct_bets')` with the given rows (columns not listed are `NULL`), runs the model's SQL on them, and compares only the columns listed under `expect`. Run it with `dbt test -s test_type:unit`. Compare with a data test (Chapter 7): a data test checks the real table after it is built; a unit test checks the SQL logic on inputs you chose, including edge cases the real data has not had yet. (The folder's tests use 1.7 and do not run this example; it was checked by hand on dbt 1.10.)
+dbt replaces `ref('fct_trips')` with the given rows (columns not listed are `NULL`), runs the model's SQL on them, and compares only the columns listed under `expect`. Run it with `dbt test -s test_type:unit`. Compare with a data test (Chapter 7): a data test checks the real table after it is built; a unit test checks the SQL logic on inputs you chose, including edge cases the real data has not had yet. (The folder's tests use 1.7 and do not run this example; it was checked by hand on dbt 1.10.)
 
 **Microbatch** (1.9+) replaces the hand-written `{% if is_incremental() %}` filter of Chapter 5:
 
@@ -1291,87 +1315,87 @@ dbt replaces `ref('fct_bets')` with the given rows (columns not listed are `NULL
 {{ config(
     materialized='incremental',
     incremental_strategy='microbatch',
-    event_time='created_at',
+    event_time='started_at',
     begin='2026-01-01',
     batch_size='day',
     lookback=1
 ) }}
-SELECT * FROM {{ ref('stg_bets') }}
+SELECT * FROM {{ ref('stg_trips') }}
 ```
 
 dbt runs the `SELECT` once per day (`batch_size`), filtering each input on its `event_time` (an input needs its own `event_time` config to be filtered; others are read in full), re-runs the previous `lookback` batches for late data, and replaces each batch as a unit. A failed day can be retried alone. The window-function trap of Section 5.7 still applies: a batch only sees its own day.
 
 ## Chapter 13. Exercises, with solutions
 
-Run from `toy_bets/`, starting each exercise from a clean copy (`git checkout -- .` and `rm toy_bets.duckdb`). Try each one before opening the solution. `test_exercises.py` applies every solution below and checks its answer.
+Run from `toy_rides/`, starting each exercise from a clean copy (`git checkout -- .` and `rm toy_rides.duckdb`). Try each one before opening the solution. `test_exercises.py` applies every solution below and checks its answer.
 
-**1.** Add a metric `('win', 'is_win')` to `bet_metrics()`. Run `dbt compile -s user_day` and count the new columns. What do `win_avg` and `win_max` mean for a user-day?
+**1.** Add a metric `('tipped', 'has_tip')` to `trip_metrics()`. Run `dbt compile -s driver_day` and count the new columns. What do `tipped_avg` and `tipped_max` mean for a driver-day?
 
 <details><summary>Solution</summary>
 
-Add `('win', 'is_win'),` to the list in `macros/bet_metrics.sql`. Four columns appear: `win_avg`, `win_median`, `win_min`, `win_max` (`metric_stats` writes four per metric; `n_bets` is not per metric). Because `is_win` is 0 or 1, `win_avg` is the **win rate** of the day and `win_max` is 1 if the user won **at least once**. After the lab's two runs: 101 on Jan 1 has `win_avg` 0.33 (1 win out of 3), 102 on Jan 1 has 1.0 (bet 4 settled at 40 and bet 5 at 15, both above the stake), 103 on Jan 2 has 0.5.
+Add `('tipped', 'has_tip'),` to the list in `macros/trip_metrics.sql`. Four columns appear: `tipped_avg`, `tipped_median`, `tipped_min`, `tipped_max` (`metric_stats` writes four per metric; `n_trips` is not per metric). Because `has_tip` is 0 or 1, `tipped_avg` is the **share of trips with a tip** that day and `tipped_max` is 1 if the driver got **at least one** tip. After the lab's two runs: 101 on Jan 1 has 0.33 (1 tipped trip out of 3), 101 on Jan 2 has 1.0, 102 on Jan 1 has 0.5 (trip 4's late tip counts; the cancellation has none), 103 on Jan 2 has 0.5. The average of a 0/1 flag is the usual way to write any rate: conversion rate, on-time delivery rate, share of days a user was active.
 
 </details>
 
-**2.** Change `user_day` so that `delta_t_seconds` is measured across days (partition by `user_id` only). Which row of the table in Section 6.3 changes, and to what?
+**2.** Change `driver_day` so that `gap_seconds` is measured across days (partition by `driver_id` only). Which row of the table in Section 6.3 changes, and to what?
 
 <details><summary>Solution</summary>
 
-Change `PARTITION BY user_id, bet_date` to `PARTITION BY user_id`. Only user 101 on Jan 2 changes: its one bet (Jan 2 08:00) now has a previous bet (Jan 1 09:03), 22 h 57 min earlier, so `delta_t_seconds_avg` and `_max` go from `NULL` to `82620`. The other rows are first bets of a user, or have a previous bet on the same day, so they do not change.
+Change `PARTITION BY driver_id, trip_date` to `PARTITION BY driver_id`. Only driver 101 on Jan 2 changes: its one trip (Jan 2 08:00) now has a previous trip (Jan 1 10:10), 21 h 50 min earlier, so `gap_seconds_avg` and `_max` go from `NULL` to `78600`. The other rows are first trips of a driver, or have a previous trip on the same day, so they do not change. Notice that 78,600 seconds is not idle time: the driver was off for the night. Partitioning by day (or better, by shift: a new shift after a long break) is a business decision, and the window clause is where it lives.
 
 </details>
 
-**3.** Delete `unique_key='bet_id'` from `fct_bets`, rebuild with `--full-refresh` as of Jan 1, then run again as of Jan 2. How many rows does bet 4 have now, and why does the `unique` test fail?
+**3.** Delete `unique_key='trip_id'` from `fct_trips`, rebuild with `--full-refresh` as of Jan 1, then run again as of Jan 2. How many rows does trip 4 have now, and why does the `unique` test fail?
 
 <details><summary>Solution</summary>
 
-Two rows: `pending / 0 / loaded Jan 1` and `settled / 40 / loaded Jan 2`. Without a key, `delete+insert` has nothing to delete by, so the new batch is only inserted. `dbt test` reports `FAIL 1 unique_fct_bets_bet_id`: one `bet_id` value appears more than once. `user_day` is now wrong too: 102 on Jan 1 counts 3 bets.
+Two rows: `tip 0 / loaded Jan 1` and `tip 6 / loaded Jan 2`. Without a key, `delete+insert` has nothing to delete by, so the new batch is only inserted. `dbt test` reports `FAIL 1 unique_fct_trips_trip_id`: one `trip_id` value appears more than once. `driver_day` is now wrong too: 102 on Jan 1 counts 3 trips and a fare total of 60 instead of 30, which would overpay the driver if a pay job read it.
 
 </details>
 
-**4.** Add an `ab_rules` rule with `op: between` and make the macro support it (`user_id BETWEEN v0 AND v1`). Then add a rule with a misspelled op and read the error message.
+**4.** Add an `experiment_rules` rule with `op: between` and make the macro support it (`driver_id BETWEEN v0 AND v1`). Then add a rule with a misspelled op and read the error message.
 
 <details><summary>Solution</summary>
 
-In `macros/ab_group_case.sql`, add a branch before `{%- else -%}`:
+In `macros/experiment_group_case.sql`, add a branch before `{%- else -%}`:
 
 ```jinja
     {%- elif rule['op'] == 'between' -%}
         {%- set condition = column ~ ' BETWEEN ' ~ rule['values'][0] ~ ' AND ' ~ rule['values'][1] -%}
 ```
 
-and in `dbt_project.yml`, after the `holdout` rule: `- {label: early, op: between, values: [100, 101]}`. After `dbt build`, user 101 is `early` (the rule comes before `A`), 102 is still `B`, 103 still `holdout`. Changing `between` to `betwen` stops `dbt compile` with:
+and in `dbt_project.yml`, after the `holdout` rule: `- {label: early, op: between, values: [100, 101]}`. After `dbt build`, driver 101 is `early` (the rule comes before `A`), 102 is still `B`, 103 still `holdout`. Changing `between` to `betwen` stops `dbt compile` with:
 
 ```
-Compilation Error in model stg_bets (models/staging/stg_bets.sql)
-  ab_rules[1]: unknown op 'betwen'
+Compilation Error in model stg_trips (models/staging/stg_trips.sql)
+  experiment_rules[1]: unknown op 'betwen'
 ```
 
 </details>
 
-**5.** Turn `user_day` into an incremental model on `bet_date` with `unique_key=['user_id', 'bet_date']`, re-reading the last day on each run. Compare its result with the `table` version after the two runs. Do they match? If `delta_t_seconds` were computed across days, would they still?
+**5.** Turn `driver_day` into an incremental model on `trip_date` with `unique_key=['driver_id', 'trip_date']`, re-reading the last day on each run. Compare its result with the `table` version after the two runs. Do they match? If `gap_seconds` were computed across days, would they still?
 
 <details><summary>Solution</summary>
 
-Add a config at the top of `user_day.sql`:
+Add a config at the top of `driver_day.sql`:
 
 ```jinja
-{{ config(materialized='incremental', unique_key=['user_id', 'bet_date'], incremental_strategy='delete+insert') }}
+{{ config(materialized='incremental', unique_key=['driver_id', 'trip_date'], incremental_strategy='delete+insert') }}
 ```
 
-and filter the input inside the `bets` CTE, after `FROM {{ ref('fct_bets') }}`:
+and filter the input inside the `trips` CTE, after `FROM {{ ref('fct_trips') }}`:
 
 ```jinja
 {% if is_incremental() %}
-WHERE bet_date >= (SELECT MAX(bet_date) FROM {{ this }})
+WHERE trip_date >= (SELECT MAX(trip_date) FROM {{ this }})
 {% endif %}
 ```
 
-After the Jan 1 and Jan 2 runs, the table equals the full-refresh table, with either partitioning. That is luck, not design. The Jan 2 run re-reads from Jan 1 (the newest day in the table after run 1), so it sees all the data; this also catches bet 4, which belongs to Jan 1 but changed on Jan 2. Imagine a Jan 3 run with across-days `delta_t`: it reads only `bet_date >= Jan 2`. If user 102 (last bet Jan 1) bets on Jan 3, `LAG` finds no earlier row in the batch and writes `NULL` instead of the real gap. And a bet from Jan 1 that settles on Jan 3 would never be re-read. The fix is the one in Section 5.7: read extra context days, write only the days you own.
+After the Jan 1 and Jan 2 runs, the table equals the full-refresh table, with either partitioning. That is luck, not design. The Jan 2 run re-reads from Jan 1 (the newest day in the table after run 1), so it sees all the data; this also catches trip 4, which belongs to Jan 1 but changed on Jan 2. Imagine a Jan 3 run with across-days `gap_seconds`: it reads only `trip_date >= Jan 2`. If driver 102 (last trip Jan 1) drives on Jan 3, `LAG` finds no earlier row in the batch and writes `NULL` instead of the real gap. And a Jan 1 trip whose tip arrives on Jan 3 would never be re-read. The fix is the one in Section 5.7: read extra context days, write only the days you own.
 
 </details>
 
-**6.** Write a generic test `at_most(model, column_name, value)` and use it on `rtp` with `value: 10`.
+**6.** Write a generic test `at_most(model, column_name, value)` and use it on `tip_rate` with `value: 1` (a tip at most 100% of the fare).
 
 <details><summary>Solution</summary>
 
@@ -1385,20 +1409,20 @@ WHERE {{ column_name }} > {{ value }}
 {% endtest %}
 ```
 
-In `_marts.yml`, under `fct_bets` columns:
+In `_marts.yml`, under `fct_trips` columns:
 
 ```yaml
-      - name: rtp
+      - name: tip_rate
         tests:
           - at_most:
-              value: 10
+              value: 1
 ```
 
-It passes: the largest `rtp` is 8.0 (bet 4). `dbt test` now runs 9 tests.
+It passes: the largest `tip_rate` is 0.2 (trips 2, 4 and 6). `dbt test` now runs 9 tests. A generic test with a parameter is reusable across a project: `at_most` with `value: 100` on a discount percentage, `value: 500` on items per order, `value: 3` on a surge multiplier.
 
 </details>
 
-**7.** With `render.py`, render `ab_group_case('player_id')` with your own rules from Python, without dbt.
+**7.** With `render.py`, render `experiment_group_case('customer_id')` with your own rules from Python, without dbt (for example, a checkout-page test at an online store).
 
 <details><summary>Solution</summary>
 
@@ -1408,23 +1432,23 @@ From `data-engineering/dbt/`:
 from render import Renderer
 rules = [{"label": "control", "op": "last_digit_in", "values": [0]},
          {"label": "treat", "op": "in", "values": [7, 8]}]
-print(Renderer("toy_bets/macros", vars={"ab_rules": rules}).call("ab_group_case", "player_id"))
+print(Renderer("toy_rides/macros", vars={"experiment_rules": rules}).call("experiment_group_case", "customer_id"))
 ```
 
 ```sql
 CASE
-    WHEN player_id % 10 IN (0) THEN 'control'
-    WHEN player_id IN (7, 8) THEN 'treat'
+    WHEN customer_id % 10 IN (0) THEN 'control'
+    WHEN customer_id IN (7, 8) THEN 'treat'
 END
 ```
 
 </details>
 
-**8.** Change `bets_snapshot` to the `check` strategy on `status` and `payout` (replace `updated_at=...` with `check_cols=['status', 'payout']`). Run the lab's Steps 3 to 7 again. Does bet 4 still get two versions? What is different in `dbt_valid_from`?
+**8.** Change `trips_snapshot` to the `check` strategy on `status` and `tip` (replace `updated_at=...` with `check_cols=['status', 'tip']`). Run the lab's Steps 3 to 7 again. Does trip 4 still get two versions? What is different in `dbt_valid_from`?
 
 <details><summary>Solution</summary>
 
-Yes, two versions: `status` and `payout` changed between the two snapshots. But with `check`, dbt has no timestamp from the data, so `dbt_valid_from` / `dbt_valid_to` are the **time the snapshot ran** (your clock, today), not `2026-01-01 23:00` and `2026-01-02 23:00`. This is why `timestamp` is preferred when the source has a trustworthy update time.
+Yes, two versions: `tip` changed between the two snapshots. But with `check`, dbt has no timestamp from the data, so `dbt_valid_from` / `dbt_valid_to` are the **time the snapshot ran** (your clock, today), not `2026-01-01 23:00` and `2026-01-02 23:00`. This is why `timestamp` is preferred when the source has a trustworthy update time. `check` is for sources without one, such as a product catalogue file a supplier sends every night with only today's prices.
 
 </details>
 

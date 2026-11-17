@@ -1,6 +1,6 @@
-name: toy_bets
+name: toy_rides
 version: '1.0.0'
-profile: toy_bets          # which entry of profiles.yml to connect with
+profile: toy_rides         # which entry of profiles.yml to connect with
 
 model-paths: ["models"]
 seed-paths: ["seeds"]
@@ -10,24 +10,25 @@ snapshot-paths: ["snapshots"]
 
 # Defaults for every model in a folder; a `{{ config(...) }}` inside a model wins.
 models:
-  toy_bets:
+  toy_rides:
     staging:
       +materialized: view
     marts:
       +materialized: table
 
 seeds:
-  toy_bets:
-    raw_bets:
+  toy_rides:
+    raw_trips:
       +column_types:
-        created_at: timestamp
+        started_at: timestamp
         loaded_at: timestamp
 
 vars:
-  # The simulated "now": stg_bets only sees rows that had arrived by then.
+  # The simulated "now": stg_trips only sees rows that had arrived by then.
   as_of: '2026-01-02 23:59:59'
-  # AB-group rules, first match wins (macros/ab_group_case.sql turns them into a CASE).
-  ab_rules:
+  # Experiment groups for drivers, first match wins
+  # (macros/experiment_group_case.sql turns them into a CASE).
+  experiment_rules:
     - {label: holdout, op: in, values: [103]}
     - {label: A, op: last_digit_in, values: [1, 3, 5, 7, 9]}
     - {label: B, op: last_digit_in, values: [0, 2, 4, 6, 8]}

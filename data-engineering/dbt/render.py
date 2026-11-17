@@ -6,9 +6,9 @@ you can see what a macro or model produces. Chapter 9 of README.md explains
 when this is handy; the real `dbt compile` is always the final word.
 
     from render import Renderer
-    r = Renderer("toy_bets/macros", vars={"ab_rules": [...]})
-    print(r.call("ab_group_case", "user_id"))
-    print(r.render_file("toy_bets/models/marts/user_day.sql"))
+    r = Renderer("toy_rides/macros", vars={"experiment_rules": [...]})
+    print(r.call("experiment_group_case", "driver_id"))
+    print(r.render_file("toy_rides/models/marts/driver_day.sql"))
 """
 import re
 from pathlib import Path

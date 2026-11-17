@@ -1,4 +1,4 @@
-{#- dbt run-operation row_count --args '{model_name: fct_bets}'
+{#- dbt run-operation row_count --args '{model_name: fct_trips}'
     Runs a query at compile time and logs the answer. -#}
 {% macro row_count(model_name) %}
     {% set query %}
