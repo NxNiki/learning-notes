@@ -106,6 +106,8 @@ SELECT (
 
 Without `MIN` or the wrapper, `SELECT salary FROM cte WHERE rnk = 2` returns an empty table.
 
+`NULL` also affects comparisons: `x = NULL` and `x <> NULL` are `UNKNOWN`, never true. This is what breaks `NOT IN` (section 3).
+
 `DISTINCT` matters in the `LIMIT/OFFSET` version: without it, duplicate top salaries (300, 300, 200) would make `OFFSET 1` return 300 again.
 
 ---
@@ -151,6 +153,48 @@ They are not automatically slow; modern optimizers often rewrite them as joins. 
 
 - **Good fits**: `EXISTS` / `NOT EXISTS` (stops at the first match), small outer tables, an indexed correlation column, or when it is the most readable option.
 - **Prefer alternatives** for large tables without indexes, several subqueries hitting the same table (use one `GROUP BY` join), or nested correlation. Per-group aggregates are usually cleaner as window functions: `AVG(salary) OVER (PARTITION BY dept_id)`.
+
+### Anti-joins: `NOT IN` vs `NOT EXISTS`
+
+An **anti-join** keeps rows of one table that have **no match** in another, e.g. customers who never ordered (LeetCode 183):
+
+```sql
+-- NOT IN: compares values against a list
+SELECT name FROM Customers
+WHERE id NOT IN (SELECT customerId FROM Orders);
+
+-- NOT EXISTS: checks whether a matching row exists (correlated)
+SELECT c.name FROM Customers c
+WHERE NOT EXISTS (SELECT 1 FROM Orders o WHERE o.customerId = c.id);
+
+-- LEFT JOIN: keep unmatched rows, then filter them
+SELECT c.name FROM Customers c
+LEFT JOIN Orders o ON o.customerId = c.id
+WHERE o.customerId IS NULL;
+```
+
+**The `NULL` trap in `NOT IN`.** SQL comparisons with `NULL` are `UNKNOWN`, not true or false, and `WHERE` keeps only true rows. `NOT IN` expands to a chain of `<>`:
+
+```sql
+id NOT IN (1, 2, NULL)
+-- = id <> 1 AND id <> 2 AND id <> NULL
+-- = ... AND UNKNOWN  → never TRUE → query returns no rows
+```
+
+So a single `NULL` in `Orders.customerId` makes the whole query return nothing. `NOT EXISTS` only asks "is there a row where `o.customerId = c.id`?"; rows with `NULL` never match and are simply ignored. (Positive `IN` / `EXISTS` don't have this problem, because a missed match and `UNKNOWN` are both filtered out the same way.)
+
+| | `NOT IN (subquery)` | `NOT EXISTS (subquery)` |
+|---|---|---|
+| What it checks | Value is not equal to any value in the list | No row satisfies the correlated condition |
+| `NULL` in subquery result | Returns **no rows** | Ignored, correct result |
+| `NULL` in outer column (`id`) | Row excluded (unless subquery is empty) | Row kept (nothing can match `NULL`) |
+| Optimizer | MySQL 8.0.17+ anti-join only when both columns are `NOT NULL`; PostgreSQL never anti-joins it (hashed subplan, very slow if it exceeds `work_mem`) | Anti-join (hash or merge) in modern MySQL and PostgreSQL |
+
+**Recommendations**
+
+- Default to `NOT EXISTS` for anti-joins; `LEFT JOIN ... IS NULL` usually gets the same plan.
+- If you use `NOT IN`, make sure the subquery can't return `NULL` (`NOT NULL` column or `WHERE customerId IS NOT NULL`).
+- Index the matched column (`Orders(customerId)`) so each existence check is an index lookup.
 
 ---
 
@@ -206,3 +250,4 @@ Use stored functions for logic reused across many queries or applications; keep 
 3. Aggregates without `GROUP BY` always return one row, so no match gives `NULL`; plain `SELECT` gives zero rows.
 4. Scalar subqueries return 1 column and at most 1 row; zero rows becomes `NULL`. This includes `SELECT (subquery)` and `RETURN (subquery)` in functions.
 5. Correlated subqueries are fine for `EXISTS` and small or indexed cases; otherwise prefer joins or window functions, and check `EXPLAIN`.
+6. For anti-joins use `NOT EXISTS`: one `NULL` in a `NOT IN` list makes the query return no rows, and `NOT IN` optimizes worse.
