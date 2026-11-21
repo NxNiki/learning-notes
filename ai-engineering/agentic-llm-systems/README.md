@@ -498,16 +498,49 @@ python agents.py "What was our refund rate?"        # ambiguous period: does it 
 
 ## Chapter 10. Further reading
 
-| Material | Why read it |
+A suggested order for someone coming from data engineering: *Building effective agents*, then Chapter 6 of *AI Engineering*, then the dbt semantic-layer articles, and then trying MetricFlow on the [dbt toy project](../../data-engineering/dbt/) in this repo.
+
+### Books
+
+| Book | Why read it |
 | --- | --- |
-| Anthropic, *Building effective agents* (2024) | Workflows versus agents, and the patterns of Section 4.5, from people who build them |
-| Anthropic, *How we built our multi-agent research system* (2025) | Orchestrator–workers in production: hand-offs, effort and cost |
+| Chip Huyen, [*AI Engineering: Building Applications with Foundation Models*](https://www.oreilly.com/library/view/ai-engineering/9781098166298/) (O'Reilly, 2024) | The best single book for this guide. Chapter 6 covers RAG and agents: retrieval algorithms and optimization, tools, planning, failure modes, evaluation and memory. Built on fundamentals rather than tools, so it ages well |
+| Jay Alammar and Maarten Grootendorst, [*Hands-On Large Language Models*](https://www.oreilly.com/library/view/hands-on-large-language/9781098150952/) (O'Reilly, 2024) | Chapter 8, "Semantic Search and Retrieval-Augmented Generation": dense retrieval and reranking, well illustrated. A companion to Chapters 5 and 6 |
+| Martin Kleppmann, *Designing Data-Intensive Applications*, chapters 3 and 4 | Indexes and schema evolution: the same ideas behind vector indexes and re-embedding |
+
+### Articles: agents
+
+| Article | Why read it |
+| --- | --- |
+| Anthropic, [*Building effective agents*](https://www.anthropic.com/engineering/building-effective-agents) (2024) | Workflows versus agents, and the patterns of Section 4.5, from people who build them |
+| Anthropic, [*How we built our multi-agent research system*](https://www.anthropic.com/engineering/multi-agent-research-system) (2025) | Orchestrator–workers in production. Multi-agent runs used about 15 times the tokens of a chat, and vague hand-offs made sub-agents duplicate work: the costs of Section 4.5, measured |
+| Lilian Weng, *LLM Powered Autonomous Agents* (2023, lilianweng.github.io) | A widely cited overview of planning, memory and tool use |
+| Eugene Yan, *Patterns for Building LLM-based Systems & Products* (2023, eugeneyan.com) | Evaluations, RAG, guardrails and caching from a practitioner: the systems of Chapter 7 |
+
+### Articles: agentic BI and semantic layers
+
+| Article | Why read it |
+| --- | --- |
+| dbt Labs, [*Semantic Layer as the Data Interface for LLMs*](https://www.getdbt.com/blog/semantic-layer-as-the-data-interface-for-llms) (2023) | An early measurement of text-to-SQL against a semantic layer on enterprise questions |
+| dbt Labs, [*Semantic layer vs. text-to-SQL (2026)*](https://docs.getdbt.com/blog/semantic-layer-vs-text-to-sql-2026), with the public [benchmark](https://dbt-labs.github.io/dbt-llm-sl-bench) | The rerun with newer models. Its conclusion is "both, for different things": the semantic layer for well-modelled metrics, SQL for the rest. The evidence behind Section 1.4 |
+| Cube, [*Why semantic layers make LLM analytics reliable*](https://cube.dev/blog/why-semantic-layers-make-llm-analytics-reliable-a-paired-benchmark-across-three-frontier-models), and the related paper [arXiv:2604.25149](https://arxiv.org/abs/2604.25149) | A paired benchmark of 100 questions across three models: giving the model a semantic layer raised accuracy by 17 to 23 points |
+
+These are vendor benchmarks on small question sets; read them for the direction of the effect, not as precise numbers.
+
+### Papers
+
+| Paper | Why read it |
+| --- | --- |
 | Yao et al., *ReAct: Synergizing Reasoning and Acting in Language Models* (2022), arXiv:2210.03629 | The reason–act–observe loop of Chapter 2 |
 | Wei et al., *Chain-of-Thought Prompting Elicits Reasoning in Large Language Models* (2022), arXiv:2201.11903 | Where Chapter 3's question comes from |
 | Lewis et al., *Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks* (2020), arXiv:2005.11401 | The original RAG paper |
 | Cormack, Clarke and Büttcher, *Reciprocal Rank Fusion outperforms Condorcet and individual rank learning methods* (SIGIR 2009) | The fusion formula of Section 5.4 |
 | Malkov and Yashunin, *Efficient and robust approximate nearest neighbor search using Hierarchical Navigable Small World graphs* (2016), arXiv:1603.09320 | HNSW, the default ANN index |
 | Jégou, Douze and Schmid, *Product Quantization for Nearest Neighbor Search* (IEEE TPAMI, 2011) | Compressing vectors |
-| Yu et al., *Spider* (2018), arXiv:1809.08887; Li et al., *BIRD* (2023), arXiv:2305.03111 | Text-to-SQL benchmarks and execution accuracy; BIRD adds the "external knowledge" problem of Section 4.1 |
-| Kleppmann, *Designing Data-Intensive Applications*, chapters 3 and 4 | Indexes and schema evolution: the same ideas behind vector indexes and re-embedding |
-| [dbt guide](../../data-engineering/dbt/) in this repo | Where metric definitions and table docs come from in a dbt shop |
+| Yu et al., *Spider* (2018), arXiv:1809.08887; Li et al., *BIRD* (2023), arXiv:2305.03111 | Text-to-SQL benchmarks graded by execution accuracy; BIRD adds the "external knowledge" problem of Section 4.1, and its leaderboard shows how current models actually do |
+
+### In this repo
+
+| Topic | Why read it |
+| --- | --- |
+| [dbt and Jinja guide](../../data-engineering/dbt/) | Where metric definitions and table docs come from in a dbt shop |
