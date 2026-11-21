@@ -17,6 +17,7 @@ One example runs through the whole guide: an *agentic BI system* for a small e-c
 | `test_retrieval.py` | Checks Chapters 5 and 6 |
 | `test_agents.py` | Checks Chapters 2, 4 and 7 |
 | `requirements.txt` | `anthropic`, needed only to run against the real model |
+| `resources/` | Notes on six key readings for agentic BI (Chapter 10) |
 
 Setup, from the repo root:
 
@@ -499,6 +500,8 @@ python agents.py "What was our refund rate?"        # ambiguous period: does it 
 ## Chapter 10. Further reading
 
 A suggested order for someone coming from data engineering: *Building effective agents*, then Chapter 6 of *AI Engineering*, then the dbt semantic-layer articles, and then trying MetricFlow on the [dbt toy project](../../data-engineering/dbt/) in this repo.
+
+Notes on the six readings most relevant to agentic BI, with their main ideas, numbers and takeaways, are in [`resources/`](resources/).
 
 ### Books
 
